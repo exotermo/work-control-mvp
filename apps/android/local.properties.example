@@ -1,0 +1,10 @@
+# Copie somente as chaves necessárias para local.properties (arquivo ignorado).
+# sdk.dir é específico de cada máquina e não deve ser compartilhado.
+
+# Debug: precisa terminar com /. Default já é http://localhost:8080/.
+BASE_URL_OVERRIDE=http://localhost:8080/
+
+# Release: hostname preparado, ainda não publicado. Precisa terminar com /.
+API_BASE_URL=https://work-control.xandehome.api.br/
+
+# Nunca coloque client secret, service token Cloudflare ou API key em BuildConfig.
