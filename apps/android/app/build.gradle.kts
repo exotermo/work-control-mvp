@@ -44,6 +44,7 @@ android {
 
     buildTypes {
         release {
+            buildConfigField("String", "PRELO_BASE_URL", apiBaseUrl("PRELO_BASE_URL", "https://prelo.invalid/").asBuildConfigString())
             buildConfigField(
                 "String",
                 "API_BASE_URL",
@@ -55,6 +56,7 @@ android {
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
         debug {
+            buildConfigField("String", "PRELO_BASE_URL", apiBaseUrl("PRELO_BASE_URL_OVERRIDE", "http://localhost:8082/").asBuildConfigString())
             buildConfigField(
                 "String",
                 "API_BASE_URL",
