@@ -28,12 +28,15 @@ class PreloContractTest {
             Task::class.java,
         )
         val action = gson.fromJson(
-            """{"id":"a1","projectId":"p1","kind":"deploy","payload":{"repository":"exotermo/loja","commitSha":"0123456789abcdef0123456789abcdef01234567","environment":"production","target":"loja.example.com","app":"loja","deployRequestId":"d1"},"payloadHash":"sha256:abc","status":"PENDING","impact":"Implantar loja","result":null}""",
+            """{"id":"a1","workspaceId":"w1","projectId":"p1","kind":"deploy","payload":{"repository":"exotermo/loja","commitSha":"0123456789abcdef0123456789abcdef01234567","environment":"production","target":"loja.example.com","app":"loja","deployRequestId":"d1"},"payloadHash":"sha256:abc","risk":"HIGH","impact":"Implantar loja","requestedBy":"github:exotermo/loja@main","idempotencyKey":"k1","status":"APPROVED","approvalId":"ap1","approvalCode":"ABCD","expiresAt":"2026-10-04T01:00:00Z","decidedAt":"2026-10-04T00:10:00Z","decidedBy":"user:owner","result":{"status":"RUNNING","sequence":1,"message":"Deploy iniciado","url":null,"artifactDigest":null,"reportedAt":"2026-10-04T00:10:10Z"},"createdAt":"2026-10-04T00:00:00Z"}""",
             ActionRequest::class.java,
         )
         assertEquals("QUEUED", task.status)
         assertEquals("0123456789abcdef0123456789abcdef01234567", action.payload.commitSha)
-        assertNull(action.result)
+        assertEquals("ap1", action.approvalId)
+        assertEquals("user:owner", action.decidedBy)
+        assertEquals(1L, action.result?.sequence)
+        assertNull(action.result?.artifactDigest)
     }
 
     @Test

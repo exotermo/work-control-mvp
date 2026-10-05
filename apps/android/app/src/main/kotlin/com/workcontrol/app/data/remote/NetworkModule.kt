@@ -8,6 +8,8 @@ import com.workcontrol.app.data.auth.InMemoryAccessTokenStore
 import com.workcontrol.app.data.auth.PreloAuthApi
 import com.workcontrol.app.data.auth.PreloAuthenticator
 import com.workcontrol.app.data.prelo.PreloApi
+import com.workcontrol.app.data.prelo.PreloResourceApi
+import com.workcontrol.app.data.prelo.ProjectHeaderInterceptor
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -54,9 +56,11 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(authInterceptor: BearerAuthInterceptor, authenticator: PreloAuthenticator): OkHttpClient {
+    fun provideOkHttpClient(authInterceptor: BearerAuthInterceptor, projectHeader: ProjectHeaderInterceptor,
+        authenticator: PreloAuthenticator): OkHttpClient {
         val builder = OkHttpClient.Builder()
             .addInterceptor(authInterceptor)
+            .addInterceptor(projectHeader)
             .authenticator(authenticator)
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
@@ -111,4 +115,8 @@ object NetworkModule {
     @Provides
     @Singleton
     fun providePreloApi(retrofit: Retrofit): PreloApi = retrofit.create(PreloApi::class.java)
+
+    @Provides
+    @Singleton
+    fun providePreloResourceApi(retrofit: Retrofit): PreloResourceApi = retrofit.create(PreloResourceApi::class.java)
 }

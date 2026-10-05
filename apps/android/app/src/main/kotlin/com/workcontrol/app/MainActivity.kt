@@ -6,7 +6,10 @@ import androidx.activity.enableEdgeToEdge
 import androidx.fragment.app.FragmentActivity
 import com.workcontrol.app.core.designsystem.WorkControlTheme
 import com.workcontrol.app.data.auth.AuthSession
+import com.workcontrol.app.data.auth.DevicePreferences
 import com.workcontrol.app.data.prelo.PreloApi
+import com.workcontrol.app.data.prelo.PreloResourceApi
+import com.workcontrol.app.data.prelo.ApprovalDecisions
 import com.workcontrol.app.feature.session.SessionScreen
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -15,11 +18,14 @@ import javax.inject.Inject
 class MainActivity : FragmentActivity() {
     @Inject lateinit var session: AuthSession
     @Inject lateinit var prelo: PreloApi
+    @Inject lateinit var resources: PreloResourceApi
+    @Inject lateinit var preferences: DevicePreferences
+    @Inject lateinit var decisions: ApprovalDecisions
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            WorkControlTheme { SessionScreen(this, session, prelo) }
+            WorkControlTheme { SessionScreen(this, session, prelo, resources, preferences, decisions) }
         }
     }
 }

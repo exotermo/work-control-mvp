@@ -25,15 +25,20 @@ import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
 import com.google.gson.Gson
 import com.workcontrol.app.data.auth.AuthSession
+import com.workcontrol.app.data.auth.DevicePreferences
 import com.workcontrol.app.data.auth.SessionPhase
 import com.workcontrol.app.data.prelo.Me
 import com.workcontrol.app.data.prelo.MobileSession
 import com.workcontrol.app.data.prelo.PreloApi
+import com.workcontrol.app.data.prelo.PreloResourceApi
+import com.workcontrol.app.data.prelo.ApprovalDecisions
+import com.workcontrol.app.feature.prelo.PreloDashboard
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
 
 @Composable
-fun SessionScreen(activity: FragmentActivity, session: AuthSession, api: PreloApi) {
+fun SessionScreen(activity: FragmentActivity, session: AuthSession, api: PreloApi,
+    resources: PreloResourceApi, preferences: DevicePreferences, decisions: ApprovalDecisions) {
     val phase by session.phase.collectAsState()
     val scope = rememberCoroutineScope()
     var email by remember { mutableStateOf("") }
@@ -93,8 +98,7 @@ fun SessionScreen(activity: FragmentActivity, session: AuthSession, api: PreloAp
             SessionPhase.Ready -> {
                 if (me == null) CircularProgressIndicator()
                 me?.let { profile ->
-                    Text("${profile.workspaceName} · ${profile.email}")
-                    Text("Projetos: ${profile.projects.joinToString { it.name }}")
+                    PreloDashboard(profile, resources, preferences, decisions, Modifier.weight(1f))
                     Button(onClick = { submit { devices = api.sessions() } }, enabled = !busy) {
                         Text("Aparelhos conectados")
                     }
