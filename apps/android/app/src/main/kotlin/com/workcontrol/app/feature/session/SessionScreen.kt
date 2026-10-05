@@ -1,8 +1,10 @@
 package com.workcontrol.app.feature.session
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
@@ -37,6 +39,7 @@ import com.google.gson.Gson
 import com.workcontrol.app.data.auth.AuthSession
 import com.workcontrol.app.data.auth.SessionController
 import com.workcontrol.app.data.auth.DevicePreferences
+import com.workcontrol.app.data.auth.DeviceSecurity
 import com.workcontrol.app.data.auth.SessionPhase
 import com.workcontrol.app.data.prelo.Me
 import com.workcontrol.app.data.prelo.MobileSession
@@ -55,12 +58,14 @@ import retrofit2.HttpException
 @Composable
 fun SessionScreen(activity: FragmentActivity, session: SessionController, api: PreloApi,
     resources: PreloResourceApi, preferences: DevicePreferences, decisions: ApprovalDecisions,
-    events: EventFeed, pushRouting: PushRouting, pushRegistrar: PushControl) {
+    events: EventFeed, pushRouting: PushRouting, pushRegistrar: PushControl,
+    deviceSecurity: DeviceSecurity) {
     val phase by session.phase.collectAsState()
     val scope = rememberCoroutineScope()
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var code by remember { mutableStateOf("") }
+    var deviceSecure by remember { mutableStateOf(deviceSecurity.isDeviceSecure()) }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var me by remember { mutableStateOf<Me?>(null) }
@@ -69,6 +74,16 @@ fun SessionScreen(activity: FragmentActivity, session: SessionController, api: P
     val serverPush by pushRegistrar.serverEnabled.collectAsState()
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     LaunchedEffect(Unit) { session.start() }
+    LaunchedEffect(phase) {
+        if (phase == SessionPhase.Code) deviceSecure = deviceSecurity.isDeviceSecure()
+    }
+    DisposableEffect(activity, deviceSecurity) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) deviceSecure = deviceSecurity.isDeviceSecure()
+        }
+        activity.lifecycle.addObserver(observer)
+        onDispose { activity.lifecycle.removeObserver(observer) }
+    }
     DisposableEffect(phase) {
         val lifecycle = ProcessLifecycleOwner.get().lifecycle
         val observer = LifecycleEventObserver { _, event ->
@@ -113,11 +128,24 @@ fun SessionScreen(activity: FragmentActivity, session: SessionController, api: P
                 }
             }
             SessionPhase.Code -> {
-                Text("Digite o código de verificação ou um código de recuperação.")
-                OutlinedTextField(code, { code = it }, label = { Text("Código") }, singleLine = true,
-                    modifier = Modifier.fillMaxWidth())
-                Button(onClick = { submit { session.verify(activity, code); code = "" } }, enabled = !busy) {
-                    Text("Verificar")
+                if (!deviceSecure) {
+                    Text("Configure um bloqueio de tela (PIN, padrão ou digital) neste aparelho para entrar no Prelo")
+                    Button(onClick = {
+                        runCatching { activity.startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS)) }
+                            .onFailure { error = "Não foi possível abrir as configurações de segurança." }
+                    }) {
+                        Text("Abrir configurações de segurança")
+                    }
+                } else {
+                    Text("Digite o código de verificação ou um código de recuperação.")
+                    OutlinedTextField(code, { code = it }, label = { Text("Código") }, singleLine = true,
+                        modifier = Modifier.fillMaxWidth())
+                    Button(onClick = {
+                        if (!deviceSecurity.isDeviceSecure()) deviceSecure = false
+                        else submit { session.verify(activity, code); code = "" }
+                    }, enabled = !busy) {
+                        Text("Verificar")
+                    }
                 }
             }
             SessionPhase.SetupRequired -> Text("Configure a verificação em duas etapas pelo navegador.")

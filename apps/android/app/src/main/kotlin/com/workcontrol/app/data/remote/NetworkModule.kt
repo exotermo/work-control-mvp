@@ -1,9 +1,12 @@
 package com.workcontrol.app.data.remote
 
+import android.app.KeyguardManager
+import android.content.Context
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.workcontrol.app.BuildConfig
 import com.workcontrol.app.data.auth.AccessTokenProvider
+import com.workcontrol.app.data.auth.DeviceSecurity
 import com.workcontrol.app.data.auth.InMemoryAccessTokenStore
 import com.workcontrol.app.data.auth.PreloAuthApi
 import com.workcontrol.app.data.auth.PreloAuthenticator
@@ -12,6 +15,7 @@ import com.workcontrol.app.data.prelo.PreloResourceApi
 import com.workcontrol.app.data.prelo.ProjectHeaderInterceptor
 import dagger.Module
 import dagger.Provides
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import java.util.concurrent.TimeUnit
@@ -35,6 +39,12 @@ annotation class RawPreloRetrofit
 @Module
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
+
+    @Provides
+    @Singleton
+    fun provideDeviceSecurity(@ApplicationContext context: Context): DeviceSecurity = DeviceSecurity {
+        context.getSystemService(KeyguardManager::class.java)?.isDeviceSecure == true
+    }
 
     @Provides
     @Singleton

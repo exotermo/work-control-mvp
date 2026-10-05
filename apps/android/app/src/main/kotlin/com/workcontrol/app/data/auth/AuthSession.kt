@@ -43,6 +43,7 @@ class AuthSession @Inject constructor(
     private val device: DevicePreferences,
     private val access: InMemoryAccessTokenStore,
     private val localUnlock: LocalUnlock,
+    private val deviceSecurity: DeviceSecurity,
     private val gson: Gson,
 ) : SessionController {
     private val refreshMutex = Mutex()
@@ -69,6 +70,7 @@ class AuthSession @Inject constructor(
 
     override suspend fun verify(activity: FragmentActivity, code: String): Boolean {
         val pending = challenge ?: return false
+        if (!deviceSecurity.isDeviceSecure()) return false
         val tokens = api.verify(MobileVerifyRequest(pending, code.trim(), device.deviceId(), Build.MODEL))
         if (!localUnlock.authenticate(activity)) {
             runCatching { api.logout(MobileRefreshRequest(tokens.refreshToken, device.deviceId())) }

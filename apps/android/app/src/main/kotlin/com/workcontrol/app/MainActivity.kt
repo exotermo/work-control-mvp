@@ -8,6 +8,7 @@ import androidx.fragment.app.FragmentActivity
 import com.workcontrol.app.core.designsystem.WorkControlTheme
 import com.workcontrol.app.data.auth.AuthSession
 import com.workcontrol.app.data.auth.DevicePreferences
+import com.workcontrol.app.data.auth.DeviceSecurity
 import com.workcontrol.app.data.prelo.PreloApi
 import com.workcontrol.app.data.prelo.PreloResourceApi
 import com.workcontrol.app.data.prelo.PreloEvents
@@ -24,6 +25,7 @@ class MainActivity : FragmentActivity() {
     @Inject lateinit var prelo: PreloApi
     @Inject lateinit var resources: PreloResourceApi
     @Inject lateinit var preferences: DevicePreferences
+    @Inject lateinit var deviceSecurity: DeviceSecurity
     @Inject lateinit var decisions: ApprovalDecisions
     @Inject lateinit var events: PreloEvents
     @Inject lateinit var pushRouting: PushRouting
@@ -34,7 +36,7 @@ class MainActivity : FragmentActivity() {
         enableEdgeToEdge()
         setContent {
             WorkControlTheme { SessionScreen(this, session, prelo, resources, preferences, decisions, events,
-                pushRouting, pushRegistrar) }
+                pushRouting, pushRegistrar, deviceSecurity) }
         }
     }
     override fun onNewIntent(intent: Intent) {

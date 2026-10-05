@@ -12,6 +12,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.workcontrol.app.data.auth.DevicePreferences
+import com.workcontrol.app.data.auth.DeviceSecurity
 import com.workcontrol.app.data.auth.SessionController
 import com.workcontrol.app.data.auth.SessionPhase
 import com.workcontrol.app.data.prelo.ApprovalDecisions
@@ -31,6 +32,7 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -64,6 +66,19 @@ class PreloFlowInstrumentedTest {
         compose.onNodeWithText("Sem acesso.").performScrollTo().assertIsDisplayed()
     }
 
+    @Test fun insecureDeviceShowsSettingsBeforeTotpVerification() {
+        showScreen(tasksForbidden = false, secureDevice = false)
+        compose.onNodeWithText("E-mail").performTextInput("user@example.com")
+        compose.onNodeWithText("Senha").performTextInput("example-password")
+        compose.onNodeWithText("Entrar").performClick()
+
+        compose.onNodeWithText("Configure um bloqueio de tela (PIN, padrão ou digital) neste aparelho para entrar no Prelo")
+            .assertIsDisplayed()
+        compose.onNodeWithText("Abrir configurações de segurança").assertIsDisplayed()
+        compose.onNodeWithText("Verificar").assertDoesNotExist()
+        assertEquals(0, server.requestCount)
+    }
+
     private fun login() {
         compose.onNodeWithText("E-mail").performTextInput("user@example.com")
         compose.onNodeWithText("Senha").performTextInput("example-password")
@@ -73,7 +88,7 @@ class PreloFlowInstrumentedTest {
         compose.waitUntil(5_000) { compose.onAllNodesWithText("Tarefas").fetchSemanticsNodes().isNotEmpty() }
     }
 
-    private fun showScreen(tasksForbidden: Boolean) {
+    private fun showScreen(tasksForbidden: Boolean, secureDevice: Boolean = true) {
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
                 val body = when (request.path?.substringBefore('?')) {
@@ -97,7 +112,8 @@ class PreloFlowInstrumentedTest {
         compose.runOnUiThread {
             compose.activity.setContent {
                 SessionScreen(compose.activity, session, api, resources, DevicePreferences(context),
-                    ApprovalDecisions(resources), FakeEvents(), PushRouting(), FakePush())
+                    ApprovalDecisions(resources), FakeEvents(), PushRouting(), FakePush(),
+                    DeviceSecurity { secureDevice })
             }
         }
     }

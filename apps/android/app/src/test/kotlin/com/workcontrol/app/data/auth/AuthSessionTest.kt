@@ -2,6 +2,8 @@ package com.workcontrol.app.data.auth
 
 import com.google.gson.Gson
 import com.workcontrol.app.data.prelo.MobileTokens
+import com.workcontrol.app.data.prelo.LoginChallenge
+import androidx.fragment.app.FragmentActivity
 import io.mockk.Runs
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -16,6 +18,7 @@ import kotlinx.coroutines.test.runTest
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -27,15 +30,29 @@ class AuthSessionTest {
     private val store = mockk<SecureRefreshStore>()
     private val device = mockk<DevicePreferences>()
     private val unlock = mockk<LocalUnlock>()
+    private val security = mockk<DeviceSecurity>()
     private val access = InMemoryAccessTokenStore()
-    private val session = AuthSession(api, store, device, access, unlock, Gson())
+    private val session = AuthSession(api, store, device, access, unlock, security, Gson())
 
     private fun setup() {
+        every { security.isDeviceSecure() } returns true
         access.replace("old-access")
         every { store.read() } returns "old-refresh"
         every { store.write(any()) } just Runs
         every { store.clear() } just Runs
         coEvery { device.deviceId() } returns "device-id"
+    }
+
+    @Test fun insecureDeviceDoesNotCreateMobileSession() = runTest {
+        every { security.isDeviceSecure() } returns false
+        coEvery { api.login(any()) } returns LoginChallenge("challenge", "TOTP_REQUIRED")
+
+        session.login("user@example.com", "password")
+        assertFalse(session.verify(mockk<FragmentActivity>(), "123456"))
+
+        coVerify(exactly = 0) { api.verify(any()) }
+        coVerify(exactly = 0) { device.deviceId() }
+        assertEquals(SessionPhase.Code, session.phase.value)
     }
 
     @Test fun concurrent401RotatesOnlyOnce() = runTest {
