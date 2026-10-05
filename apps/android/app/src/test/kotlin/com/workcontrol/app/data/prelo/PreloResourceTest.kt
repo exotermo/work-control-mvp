@@ -16,6 +16,23 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
 class PreloResourceTest {
+    @Test fun listsFilesAndDownloadsExactProjectContent() = runBlocking {
+        val server = MockWebServer()
+        server.start()
+        try {
+            server.enqueue(MockResponse().addHeader("Content-Type", "application/json")
+                .setBody("""{"files":[{"id":"f1","name":"brief.pdf"}],"totalBytes":3,"maxFileBytes":1000}"""))
+            server.enqueue(MockResponse().addHeader("Content-Type", "application/pdf").setBody("pdf"))
+            val api = Retrofit.Builder().baseUrl(server.url("/"))
+                .addConverterFactory(GsonConverterFactory.create()).build()
+                .create(PreloResourceApi::class.java)
+            assertEquals("f1", api.files("p1").asJsonObject.getAsJsonArray("files")[0].asJsonObject.get("id").asString)
+            assertEquals("pdf", api.fileContent("p1", "f1").use { it.string() })
+            assertEquals("/api/v1/projects/p1/files", server.takeRequest().path)
+            assertEquals("/api/v1/projects/p1/files/f1/content", server.takeRequest().path)
+        } finally { server.shutdown() }
+    }
+
     @Test fun projectHeaderIsScopedToProjectResources() = runBlocking {
         val server = MockWebServer()
         server.start()

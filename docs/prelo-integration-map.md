@@ -11,7 +11,7 @@ O Android lê e escreve diretamente no Prelo. O servidor é a autoridade de iden
 | Máquinas | `/servers`, detalhe, health-check | Ligada; sem CPU/RAM inventados. |
 | Pipeline | `/pipeline` | Ligada. |
 | Deploys | `/projects/{id}/actions?kind=deploy` | Leitura ligada; sem execução no app. |
-| Arquivos | `/projects/{id}/files` | Listagem ligada; download ainda pendente na interface. |
+| Arquivos | `/projects/{id}/files`, `/files/{fileId}/content` | Listagem e download ligados. |
 | Terminal e diff | Nenhum endpoint contratado | Removidos da navegação. |
 
 SSE: `GET /api/v1/events/stream` apenas em primeiro plano, com reconexão e polling reserva. Push: `PUT|DELETE /api/v1/me/push-token`, com FCM opcional. O servidor está inicialmente com `pushEnabled=false`. A tela sempre consulta o estado atual via API após aviso SSE ou push.

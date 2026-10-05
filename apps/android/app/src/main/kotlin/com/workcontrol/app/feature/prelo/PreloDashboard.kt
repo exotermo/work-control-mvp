@@ -1,5 +1,7 @@
 package com.workcontrol.app.feature.prelo
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
@@ -34,6 +37,8 @@ import com.workcontrol.app.data.prelo.PreloEvents
 import com.workcontrol.app.data.push.PushRouting
 import com.workcontrol.app.data.prelo.Project
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.filter
@@ -51,6 +56,7 @@ private enum class Page(val title: String) {
 fun PreloDashboard(me: Me, api: PreloResourceApi, preferences: DevicePreferences,
     decisions: ApprovalDecisions, events: PreloEvents, pushRouting: PushRouting, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     var page by remember { mutableStateOf(Page.HOME) }
     var selected by remember { mutableStateOf<String?>(null) }
     var data by remember { mutableStateOf<JsonElement?>(null) }
@@ -69,6 +75,22 @@ fun PreloDashboard(me: Me, api: PreloResourceApi, preferences: DevicePreferences
     var totp by remember { mutableStateOf("") }
     var adminProjects by remember { mutableStateOf<List<Project>>(emptyList()) }
     var pendingApprovalId by remember { mutableStateOf<String?>(null) }
+    var downloadId by remember { mutableStateOf<String?>(null) }
+    val saveFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        val id = downloadId
+        val projectId = selected
+        downloadId = null
+        if (uri != null && id != null && projectId != null) scope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    api.fileContent(projectId, id).use { body ->
+                        val output = requireNotNull(context.contentResolver.openOutputStream(uri))
+                        output.use { body.byteStream().use { input -> input.copyTo(it) } }
+                    }
+                }
+            } catch (failure: Exception) { error = displayError(failure) }
+        }
+    }
     val destination by pushRouting.destination.collectAsState()
     val connected by events.connected.collectAsState()
 
@@ -92,17 +114,21 @@ fun PreloDashboard(me: Me, api: PreloResourceApi, preferences: DevicePreferences
 
     LaunchedEffect(me.userId) {
         val remembered = preferences.projectId()
-        selected = remembered?.takeIf { id -> me.projects.any { it.id == id } } ?: me.projects.firstOrNull()?.id
+        val initial = remembered?.takeIf { id -> me.projects.any { it.id == id } } ?: me.projects.firstOrNull()?.id
+        preferences.setProjectId(initial)
+        selected = initial
         if (me.role == "ADMIN") {
             runCatching { api.projects() }.getOrNull()?.let { result ->
                 adminProjects = result.rows().mapNotNull { item ->
                     val id = item.str("id") ?: return@mapNotNull null
                     Project(id, item.str("name") ?: id, item.str("clientId"))
                 }
-                if (remembered != null && adminProjects.any { it.id == remembered }) selected = remembered
+                if (remembered != null && adminProjects.any { it.id == remembered }) {
+                    preferences.setProjectId(remembered)
+                    selected = remembered
+                }
             }
         }
-        if (selected != remembered) preferences.setProjectId(selected)
     }
     LaunchedEffect(page, selected) {
         detail = null; detailId = null; execution = null; tree = null; turns = null
@@ -190,7 +216,7 @@ fun PreloDashboard(me: Me, api: PreloResourceApi, preferences: DevicePreferences
         if (choices.isNotEmpty()) {
             Text("Projeto")
             choices.forEach { project ->
-                Button(onClick = { action { selected = project.id; preferences.setProjectId(project.id) } }, enabled = !busy) {
+                Button(onClick = { action { preferences.setProjectId(project.id); selected = project.id } }, enabled = !busy) {
                     Text("${if (selected == project.id) "✓ " else ""}${project.name}")
                 }
             }
@@ -224,6 +250,11 @@ fun PreloDashboard(me: Me, api: PreloResourceApi, preferences: DevicePreferences
                 Text(item.line(page), modifier = Modifier.padding(vertical = 4.dp))
                 if (id != null && page in listOf(Page.TASKS, Page.APPROVALS, Page.SERVERS)) {
                     Button(onClick = { openItem(id) }, enabled = !busy) { Text("Abrir") }
+                }
+                if (id != null && page == Page.FILES) {
+                    Button(onClick = { downloadId = id; saveFile.launch(item.str("name") ?: "arquivo") }) {
+                        Text("Baixar")
+                    }
                 }
             }
             if (items.isEmpty() && data != null) Text("Nenhum item.")
@@ -267,7 +298,7 @@ private fun JsonElement?.str(name: String): String? = this.obj()?.get(name)?.tak
 private fun JsonElement?.rows(): List<JsonElement> = when {
     this == null || isJsonNull -> emptyList()
     isJsonArray -> asJsonArray.toList()
-    isJsonObject -> obj()?.get("items").rows()
+    isJsonObject -> (obj()?.get("items") ?: obj()?.get("files")).rows()
     else -> emptyList()
 }
 private fun JsonElement.line(page: Page): String = when (page) {

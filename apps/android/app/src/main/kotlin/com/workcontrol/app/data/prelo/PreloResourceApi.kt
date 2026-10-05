@@ -8,6 +8,8 @@ import retrofit2.http.PUT
 import retrofit2.http.DELETE
 import retrofit2.http.Path
 import retrofit2.http.Query
+import retrofit2.http.Streaming
+import okhttp3.ResponseBody
 
 /** Read models stay as server JSON; the server owns state and authorization. */
 interface PreloResourceApi {
@@ -40,6 +42,9 @@ interface PreloResourceApi {
     suspend fun deploys(@Path("projectId") projectId: String, @Query("kind") kind: String = "deploy",
         @Query("limit") limit: Int = 50): JsonElement
     @GET("api/v1/projects/{projectId}/files") suspend fun files(@Path("projectId") projectId: String): JsonElement
+    @Streaming
+    @GET("api/v1/projects/{projectId}/files/{fileId}/content")
+    suspend fun fileContent(@Path("projectId") projectId: String, @Path("fileId") fileId: String): ResponseBody
 }
 
 data class ApprovalDecision(val totpCode: String? = null)
