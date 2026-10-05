@@ -1,10 +1,9 @@
 # Copie somente as chaves necessárias para local.properties (arquivo ignorado).
 # sdk.dir é específico de cada máquina e não deve ser compartilhado.
 
-# Debug: precisa terminar com /. Default já é http://localhost:8080/.
-BASE_URL_OVERRIDE=http://localhost:8080/
+# Debug: precisa terminar com /. Use adb reverse tcp:8082 tcp:8082 em aparelho físico.
+PRELO_BASE_URL_OVERRIDE=http://localhost:8082/
 
-# Release: hostname preparado, ainda não publicado. Precisa terminar com /.
-API_BASE_URL=https://work-control.xandehome.api.br/
+# Release: PRELO_BASE_URL deve apontar para a instância HTTPS do Prelo.
 
 # Nunca coloque client secret, service token Cloudflare ou API key em BuildConfig.

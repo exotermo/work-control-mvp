@@ -4,14 +4,14 @@ import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Boundary usado por HTTP e WebSocket. A implementação OIDC do Marco 2 alimentará este store. */
+/** Access token da sessão Prelo, consumido somente pelo cliente HTTP e SSE. */
 fun interface AccessTokenProvider {
     fun accessToken(): String?
 }
 
 /**
  * Sessão somente em memória: evita persistir bearer token sem a proteção do Android Keystore.
- * O armazenamento durável será adicionado junto ao login OIDC, não como preferência em texto claro.
+ * O refresh cifrado fica em SecureRefreshStore; o access token nunca é persistido.
  */
 @Singleton
 class InMemoryAccessTokenStore @Inject constructor() : AccessTokenProvider {

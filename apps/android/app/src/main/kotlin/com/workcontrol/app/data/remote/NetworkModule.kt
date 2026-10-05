@@ -17,7 +17,6 @@ import dagger.hilt.components.SingletonComponent
 import java.util.concurrent.TimeUnit
 import javax.inject.Qualifier
 import javax.inject.Singleton
-import kotlinx.serialization.json.Json
 import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -44,10 +43,6 @@ object NetworkModule {
     @Provides
     @Singleton
     fun provideGson(): Gson = GsonBuilder().create()
-
-    @Provides
-    @Singleton
-    fun provideJson(): Json = Json { ignoreUnknownKeys = true }
 
     @Provides
     @Singleton
@@ -93,11 +88,6 @@ object NetworkModule {
         .client(client)
         .addConverterFactory(GsonConverterFactory.create(gson))
         .build()
-
-    @Provides
-    @Singleton
-    fun provideWorkControlApi(retrofit: Retrofit): WorkControlApi =
-        retrofit.create(WorkControlApi::class.java)
 
     @Provides
     @Singleton
