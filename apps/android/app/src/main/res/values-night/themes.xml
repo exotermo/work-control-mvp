@@ -1,9 +1,9 @@
 <resources>
-    <!-- Paper edition: the window is already newsprint before Compose draws (no black flash). -->
-    <style name="Theme.WorkControl" parent="android:Theme.Material.Light.NoActionBar">
+    <!-- Night edition ("papel carbono"). -->
+    <style name="Theme.WorkControl" parent="android:Theme.Material.NoActionBar">
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowBackground">@color/app_background</item>
-        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightStatusBar">false</item>
     </style>
 </resources>
