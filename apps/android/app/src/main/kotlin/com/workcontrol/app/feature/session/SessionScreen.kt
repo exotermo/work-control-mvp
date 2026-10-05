@@ -12,12 +12,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -29,6 +29,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
@@ -36,6 +38,21 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.google.gson.Gson
+import com.workcontrol.app.core.components.Clipping
+import com.workcontrol.app.core.components.ClippingFooter
+import com.workcontrol.app.core.components.ErrorClipping
+import com.workcontrol.app.core.components.GhostButton
+import com.workcontrol.app.core.components.Headline
+import com.workcontrol.app.core.components.InkButton
+import com.workcontrol.app.core.components.InkField
+import com.workcontrol.app.core.components.InkLink
+import com.workcontrol.app.core.components.Kicker
+import com.workcontrol.app.core.components.Masthead
+import com.workcontrol.app.core.components.PaperBackground
+import com.workcontrol.app.core.components.PressSkeleton
+import com.workcontrol.app.core.designsystem.Prelo
+import com.workcontrol.app.core.designsystem.PreloType
+import com.workcontrol.app.core.designsystem.ThemeMode
 import com.workcontrol.app.data.auth.AuthSession
 import com.workcontrol.app.data.auth.SessionController
 import com.workcontrol.app.data.auth.DevicePreferences
@@ -59,7 +76,8 @@ import retrofit2.HttpException
 fun SessionScreen(activity: FragmentActivity, session: SessionController, api: PreloApi,
     resources: PreloResourceApi, preferences: DevicePreferences, decisions: ApprovalDecisions,
     events: EventFeed, pushRouting: PushRouting, pushRegistrar: PushControl,
-    deviceSecurity: DeviceSecurity) {
+    deviceSecurity: DeviceSecurity, themeMode: ThemeMode = ThemeMode.SYSTEM,
+    onThemeMode: (ThemeMode) -> Unit = {}) {
     val phase by session.phase.collectAsState()
     val scope = rememberCoroutineScope()
     var email by remember { mutableStateOf("") }
@@ -72,7 +90,13 @@ fun SessionScreen(activity: FragmentActivity, session: SessionController, api: P
     var devices by remember { mutableStateOf<List<MobileSession>>(emptyList()) }
     var pushWanted by remember { mutableStateOf(true) }
     val serverPush by pushRegistrar.serverEnabled.collectAsState()
-    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    var notificationsAllowed by remember {
+        mutableStateOf(Build.VERSION.SDK_INT < 33 ||
+            ContextCompat.checkSelfPermission(activity, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED)
+    }
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        notificationsAllowed = granted || Build.VERSION.SDK_INT < 33
+    }
     LaunchedEffect(Unit) { session.start() }
     LaunchedEffect(phase) {
         if (phase == SessionPhase.Code) deviceSecure = deviceSecurity.isDeviceSecure()
@@ -113,85 +137,106 @@ fun SessionScreen(activity: FragmentActivity, session: SessionController, api: P
             finally { busy = false }
         }
     }
-    Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Prelo Control")
-        when (val current = phase) {
-            is SessionPhase.Login -> {
-                current.notice?.let { Text(it) }
-                OutlinedTextField(email, { email = it }, label = { Text("E-mail") }, singleLine = true,
-                    modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(password, { password = it }, label = { Text("Senha") },
-                    visualTransformation = PasswordVisualTransformation(), singleLine = true,
-                    modifier = Modifier.fillMaxWidth())
-                Button(onClick = { submit { session.login(email, password); password = "" } }, enabled = !busy) {
-                    Text("Entrar")
+    if (phase == SessionPhase.Ready) {
+        val profile = me
+        if (profile == null) {
+            PaperBackground(Modifier.fillMaxSize()) {
+                Column(Modifier.statusBarsPadding().padding(16.dp)) {
+                    Masthead(live = false)
+                    error?.let { ErrorClipping(it, Modifier.padding(top = 12.dp)) } ?: PressSkeleton(Modifier.padding(top = 16.dp))
                 }
             }
-            SessionPhase.Code -> {
-                if (!deviceSecure) {
-                    Text("Configure um bloqueio de tela (PIN, padrão ou digital) neste aparelho para entrar no Prelo")
-                    Button(onClick = {
+        } else {
+            PreloDashboard(profile, resources, preferences, decisions, events, pushRouting, Modifier.fillMaxSize(),
+                homeNotice = if (!notificationsAllowed) ({
+                    NotificationNotice { permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }
+                }) else null,
+                account = {
+                    AccountContent(
+                        serverPush = serverPush, pushWanted = pushWanted, notificationsAllowed = notificationsAllowed,
+                        onAllowNotifications = { permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) },
+                        onTogglePush = { submit {
+                            if (pushRegistrar.setWanted(!pushWanted)) pushWanted = !pushWanted
+                            else error = "Não foi possível alterar as notificações no servidor."
+                        } },
+                        themeMode = themeMode, onThemeMode = onThemeMode,
+                        devices = devices, onLoadDevices = { submit { devices = api.sessions() } },
+                        onRevoke = { item -> submit {
+                            api.revokeSession(item.id)
+                            if (item.current) session.sessionEnded() else devices = api.sessions()
+                        } },
+                        onLogout = { submit {
+                            if (!session.logout(activity)) error = "Não foi possível encerrar a sessão no servidor. Tente novamente."
+                        } },
+                        busy = busy, error = error,
+                    )
+                })
+        }
+        return
+    }
+
+    // Signed out: the front page of the "access edition", with each step as a clipping.
+    PaperBackground(Modifier.fillMaxSize()) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .statusBarsPadding()
+                .imePadding()
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
+        ) {
+            AccessMasthead()
+            when (val current = phase) {
+                is SessionPhase.Login -> Clipping(seed = 11) {
+                    Kicker("Acesso")
+                    Headline("Entre na redação")
+                    current.notice?.let { Text(it, Modifier.padding(bottom = 8.dp), style = PreloType.Body, color = Prelo.colors.bad) }
+                    InkField(email, { email = it }, "E-mail", Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next))
+                    InkField(password, { password = it }, "Senha", Modifier.fillMaxWidth().padding(top = 8.dp),
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done))
+                    InkButton("Entrar", onClick = { submit { session.login(email, password); password = "" } },
+                        modifier = Modifier.fillMaxWidth().padding(top = 18.dp), enabled = !busy)
+                }
+                SessionPhase.Code -> if (!deviceSecure) Clipping(seed = 12) {
+                    Kicker("Segurança do aparelho")
+                    Headline("Falta um bloqueio de tela")
+                    Text("Configure um bloqueio de tela (PIN, padrão ou digital) neste aparelho para entrar no Prelo",
+                        style = PreloType.Body, color = Prelo.colors.text)
+                    GhostButton("Abrir configurações de segurança", onClick = {
                         runCatching { activity.startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS)) }
                             .onFailure { error = "Não foi possível abrir as configurações de segurança." }
-                    }) {
-                        Text("Abrir configurações de segurança")
-                    }
-                } else {
-                    Text("Digite o código de verificação ou um código de recuperação.")
-                    OutlinedTextField(code, { code = it }, label = { Text("Código") }, singleLine = true,
-                        modifier = Modifier.fillMaxWidth())
-                    Button(onClick = {
+                    }, modifier = Modifier.fillMaxWidth().padding(top = 16.dp))
+                } else Clipping(seed = 13) {
+                    Kicker("Telegrama · verificação em duas etapas")
+                    Headline("Confirme que é você")
+                    Text("Digite o código de verificação ou um código de recuperação.", style = PreloType.Body, color = Prelo.colors.text)
+                    InkField(code, { code = it }, "Código", Modifier.fillMaxWidth().padding(top = 10.dp), mono = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done))
+                    InkButton("Verificar", onClick = {
                         if (!deviceSecurity.isDeviceSecure()) deviceSecure = false
                         else submit { session.verify(activity, code); code = "" }
-                    }, enabled = !busy) {
-                        Text("Verificar")
-                    }
+                    }, modifier = Modifier.fillMaxWidth().padding(top = 18.dp), enabled = !busy)
                 }
-            }
-            SessionPhase.SetupRequired -> Text("Configure a verificação em duas etapas pelo navegador.")
-            SessionPhase.Unlock -> {
-                Text("Confirme no aparelho para desbloquear sua sessão.")
-                Button(onClick = { submit { session.unlockAndRestore(activity) } }, enabled = !busy) {
-                    Text("Desbloquear")
+                SessionPhase.SetupRequired -> Clipping(seed = 14) {
+                    Kicker("Primeiro acesso")
+                    Headline("Falta a verificação em duas etapas")
+                    Text("Configure a verificação em duas etapas pelo navegador.", style = PreloType.Body, color = Prelo.colors.text)
+                    ClippingFooter { InkLink("Voltar ao login", onClick = { session.sessionEnded() }) }
                 }
-            }
-            SessionPhase.Ready -> {
-                if (me == null) CircularProgressIndicator()
-                me?.let { profile ->
-                    PreloDashboard(profile, resources, preferences, decisions, events, pushRouting, Modifier.weight(1f))
-                    if (Build.VERSION.SDK_INT >= 33 &&
-                        ContextCompat.checkSelfPermission(activity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                        Text("Ative notificações para receber alertas de aprovações e deploys.")
-                        Button(onClick = { permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }) {
-                            Text("Permitir notificações")
-                        }
-                    }
-                    if (!serverPush) Text("Notificações ainda não ativadas no servidor.")
-                    Button(onClick = { submit {
-                        if (pushRegistrar.setWanted(!pushWanted)) pushWanted = !pushWanted
-                        else error = "Não foi possível alterar as notificações no servidor."
-                    } }, enabled = !busy) { Text(if (pushWanted) "Desligar notificações" else "Ligar notificações") }
-                    Button(onClick = { submit { devices = api.sessions() } }, enabled = !busy) {
-                        Text("Aparelhos conectados")
-                    }
-                    LazyColumn(Modifier.weight(1f)) {
-                        items(devices, key = { it.id }) { item ->
-                            Text("${item.deviceName} · ${item.platform}${if (item.current) " · este aparelho" else ""}")
-                            Button(onClick = { submit {
-                                api.revokeSession(item.id)
-                                if (item.current) session.sessionEnded() else devices = api.sessions()
-                            } }, enabled = !busy) { Text("Revogar") }
-                        }
-                    }
-                    Button(onClick = { submit {
-                        if (!session.logout(activity)) error = "Não foi possível encerrar a sessão no servidor. Tente novamente."
-                    } }, enabled = !busy) {
-                        Text("Sair")
-                    }
+                SessionPhase.Unlock -> Clipping(seed = 15) {
+                    Kicker("Sessão guardada neste aparelho")
+                    Headline("Bem-vindo de volta")
+                    Text("Confirme no aparelho para desbloquear sua sessão.", style = PreloType.Body, color = Prelo.colors.text)
+                    InkButton("Desbloquear", onClick = { submit { session.unlockAndRestore(activity) } },
+                        modifier = Modifier.fillMaxWidth().padding(top = 18.dp), enabled = !busy)
                 }
+                SessionPhase.Ready -> Unit
             }
+            error?.let { Text(it, style = androidx.compose.material3.MaterialTheme.typography.bodyMedium, color = Prelo.colors.bad) }
         }
-        error?.let { Text(it) }
     }
 }
 
