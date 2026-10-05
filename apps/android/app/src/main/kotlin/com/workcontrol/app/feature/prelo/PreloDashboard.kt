@@ -2,328 +2,143 @@ package com.workcontrol.app.feature.prelo
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Assignment
+import androidx.compose.material.icons.outlined.Gavel
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.MenuBook
+import androidx.compose.material.icons.outlined.RocketLaunch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.google.gson.JsonElement
-import com.google.gson.JsonObject
+import com.workcontrol.app.core.components.BarItem
+import com.workcontrol.app.core.components.ErrorClipping
+import com.workcontrol.app.core.components.InkButton
+import com.workcontrol.app.core.components.Kicker
+import com.workcontrol.app.core.components.Masthead
+import com.workcontrol.app.core.components.PageTurn
+import com.workcontrol.app.core.components.PaperBackground
+import com.workcontrol.app.core.components.PaperSheet
+import com.workcontrol.app.core.components.PreloBottomBar
+import com.workcontrol.app.core.components.PressSkeleton
+import com.workcontrol.app.core.components.ScanlineSweep
+import com.workcontrol.app.core.components.Rule
+import com.workcontrol.app.core.designsystem.Prelo
 import com.workcontrol.app.data.auth.DevicePreferences
-import com.workcontrol.app.data.prelo.ApprovalDecision
 import com.workcontrol.app.data.prelo.ApprovalDecisions
-import com.workcontrol.app.data.prelo.ApproveOutcome
-import com.workcontrol.app.data.prelo.CreateTask
+import com.workcontrol.app.data.prelo.EventFeed
 import com.workcontrol.app.data.prelo.Me
 import com.workcontrol.app.data.prelo.PreloResourceApi
-import com.workcontrol.app.data.prelo.PreloEvents
-import com.workcontrol.app.data.prelo.EventFeed
 import com.workcontrol.app.data.push.PushRouting
-import com.workcontrol.app.data.prelo.Project
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.debounce
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.collect
-import retrofit2.HttpException
+import com.workcontrol.app.feature.prelo.screens.ApprovalsScreen
+import com.workcontrol.app.feature.prelo.screens.DeploysScreen
+import com.workcontrol.app.feature.prelo.screens.FilesScreen
+import com.workcontrol.app.feature.prelo.screens.HomeScreen
+import com.workcontrol.app.feature.prelo.screens.MoreScreen
+import com.workcontrol.app.feature.prelo.screens.NewTaskSheet
+import com.workcontrol.app.feature.prelo.screens.PipelineScreen
+import com.workcontrol.app.feature.prelo.screens.ServersScreen
+import com.workcontrol.app.feature.prelo.screens.TasksScreen
 
-private enum class Page(val title: String) {
-    HOME("Início"), TASKS("Tarefas"), APPROVALS("Aprovações"),
-    SERVERS("Máquinas"), PIPELINE("Pipeline"), DEPLOYS("Deploys"), FILES("Arquivos")
-}
-
-/** Every displayed item comes from the Prelo API; local state only selects a view. */
-@OptIn(kotlinx.coroutines.FlowPreview::class)
+/**
+ * The signed-in app: a front page with the masthead and telemetry strip, sections turned like
+ * magazine pages, a bottom bar and the "Nova tarefa" button. Every item comes from the Prelo API
+ * through [PreloController]; [account] is the Conta page (owned by the session screen) and
+ * [homeNotice] an optional banner on the front page (notification permission).
+ */
 @Composable
 fun PreloDashboard(me: Me, api: PreloResourceApi, preferences: DevicePreferences,
-    decisions: ApprovalDecisions, events: EventFeed, pushRouting: PushRouting, modifier: Modifier = Modifier) {
-    val scope = rememberCoroutineScope()
+    decisions: ApprovalDecisions, events: EventFeed, pushRouting: PushRouting, modifier: Modifier = Modifier,
+    homeNotice: (@Composable () -> Unit)? = null, account: @Composable () -> Unit = {}) {
+    val c = rememberPreloController(me, api, preferences, decisions, events, pushRouting)
     val context = LocalContext.current
-    var page by remember { mutableStateOf(Page.HOME) }
-    var selected by remember { mutableStateOf<String?>(null) }
-    var data by remember { mutableStateOf<JsonElement?>(null) }
-    var detail by remember { mutableStateOf<JsonElement?>(null) }
-    var detailId by remember { mutableStateOf<String?>(null) }
-    var execution by remember { mutableStateOf<JsonElement?>(null) }
-    var tree by remember { mutableStateOf<JsonElement?>(null) }
-    var turns by remember { mutableStateOf<JsonElement?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var busy by remember { mutableStateOf(false) }
-    var refresh by remember { mutableIntStateOf(0) }
-    var description by remember { mutableStateOf("") }
-    var agentId by remember { mutableStateOf("") }
-    var agents by remember { mutableStateOf<JsonElement?>(null) }
-    var stepUpId by remember { mutableStateOf<String?>(null) }
-    var totp by remember { mutableStateOf("") }
-    var adminProjects by remember { mutableStateOf<List<Project>>(emptyList()) }
-    var pendingApprovalId by remember { mutableStateOf<String?>(null) }
-    var downloadId by remember { mutableStateOf<String?>(null) }
-    val saveFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
-        val id = downloadId
-        val projectId = selected
-        downloadId = null
-        if (uri != null && id != null && projectId != null) scope.launch {
-            try {
-                withContext(Dispatchers.IO) {
-                    api.fileContent(projectId, id).use { body ->
-                        val output = requireNotNull(context.contentResolver.openOutputStream(uri))
-                        output.use { body.byteStream().use { input -> input.copyTo(it) } }
-                    }
-                }
-            } catch (failure: Exception) { error = displayError(failure) }
-        }
-    }
-    val destination by pushRouting.destination.collectAsState()
     val connected by events.connected.collectAsState()
+    var newTask by remember { mutableStateOf(false) }
+    var choosingProject by remember { mutableStateOf(false) }
+    val saveFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        c.saveDownload(context, uri)
+    }
+    var pendingDownloadName by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(pendingDownloadName) { pendingDownloadName?.let { saveFile.launch(it); pendingDownloadName = null } }
 
-    LaunchedEffect(page, selected, detailId) {
-        events.events.filter { event ->
-            (event.projectId == null || event.projectId == selected) && when (event.kind) {
-                "resync" -> true
-                "task", "execution" -> page in listOf(Page.HOME, Page.TASKS, Page.PIPELINE) &&
-                    (page != Page.TASKS || detailId == null || event.id == detailId ||
-                        event.taskId == detailId || event.parentId == detailId)
-                "approval" -> page in listOf(Page.HOME, Page.APPROVALS) &&
-                    (page != Page.APPROVALS || detailId == null || event.id == detailId)
-                "action" -> page == Page.DEPLOYS
-                else -> false
-            }
-        }.debounce(150).collect { refresh++ }
-    }
-    LaunchedEffect(page, selected, connected) {
-        while (true) { delay(if (connected) 45_000 else 10_000); refresh++ }
-    }
+    val tabs = listOf(
+        BarItem(Page.HOME, "Início", Icons.Outlined.Home),
+        BarItem(Page.TASKS, "Tarefas", Icons.Outlined.Assignment),
+        BarItem(Page.APPROVALS, "Aprovações", Icons.Outlined.Gavel, badge = c.pendingApprovals),
+        BarItem(Page.DEPLOYS, "Deploys", Icons.Outlined.RocketLaunch),
+        BarItem(Page.MORE, "Mais", Icons.Outlined.MenuBook),
+    )
+    val barSelection = if (c.page in listOf(Page.SERVERS, Page.PIPELINE, Page.FILES, Page.ACCOUNT)) Page.MORE else c.page
 
-    LaunchedEffect(me.userId) {
-        val remembered = preferences.projectId()
-        val initial = remembered?.takeIf { id -> me.projects.any { it.id == id } } ?: me.projects.firstOrNull()?.id
-        preferences.setProjectId(initial)
-        selected = initial
-        if (me.role == "ADMIN") {
-            runCatching { api.projects() }.getOrNull()?.let { result ->
-                adminProjects = result.rows().mapNotNull { item ->
-                    val id = item.str("id") ?: return@mapNotNull null
-                    Project(id, item.str("name") ?: id, item.str("clientId"))
-                }
-                if (remembered != null && adminProjects.any { it.id == remembered }) {
-                    preferences.setProjectId(remembered)
-                    selected = remembered
-                }
-            }
-        }
-    }
-    LaunchedEffect(page, selected) {
-        detail = null; detailId = null; execution = null; tree = null; turns = null
-    }
-    LaunchedEffect(page, selected, refresh) {
-        data = null; error = null
-        try {
-            data = when (page) {
-                Page.HOME -> api.home()
-                Page.TASKS -> api.tasks()
-                Page.APPROVALS -> api.approvals()
-                Page.SERVERS -> api.servers()
-                Page.PIPELINE -> api.pipeline()
-                Page.DEPLOYS -> selected?.let { api.deploys(it) }
-                Page.FILES -> selected?.let { api.files(it) }
-            }
-            if (page == Page.TASKS) agents = runCatching { api.agents() }.getOrNull()
-            (detailId ?: pendingApprovalId)?.let { id ->
-                detail = when (page) {
-                    Page.TASKS -> api.task(id)
-                    Page.APPROVALS -> api.approval(id)
-                    Page.SERVERS -> api.server(id)
-                    else -> null
-                }
-                if (page == Page.APPROVALS) { detailId = id; pendingApprovalId = null }
-                if (page == Page.TASKS) {
-                    execution = runCatching { api.latest(id) }.getOrNull()
-                    val executionId = execution?.str("executionId")
-                    if (executionId != null) {
-                        execution = runCatching { api.execution(id, executionId) }.getOrNull() ?: execution
-                        turns = runCatching { api.turns(id, executionId) }.getOrNull()
+    PaperBackground(modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize()) {
+            Masthead(
+                live = connected,
+                modifier = Modifier.statusBarsPadding().padding(horizontal = 16.dp).padding(top = 10.dp),
+                projectName = c.projectName ?: if (c.projects.isEmpty()) null else "Projeto",
+                onProjectClick = if (c.projects.size > 1) ({ choosingProject = true }) else null,
+                pollSeconds = 10,
+            )
+            ScanlineSweep(c.liveTick)
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                PageTurn(c.page, Modifier.fillMaxSize()) { page ->
+                    val pad = PaddingValues(start = 16.dp, end = 16.dp, bottom = 96.dp)
+                    when (page) {
+                        Page.HOME -> HomeScreen(c, pad, homeNotice)
+                        Page.TASKS -> TasksScreen(c, pad)
+                        Page.APPROVALS -> ApprovalsScreen(c, pad)
+                        Page.DEPLOYS -> DeploysScreen(c, pad)
+                        Page.MORE -> MoreScreen(c, pad)
+                        Page.SERVERS -> ServersScreen(c, pad)
+                        Page.PIPELINE -> PipelineScreen(c, pad)
+                        Page.FILES -> FilesScreen(c, pad) { id, name -> c.requestDownload(id); pendingDownloadName = name }
+                        Page.ACCOUNT -> AccountPage(c, pad, account)
                     }
                 }
+                if (c.page in listOf(Page.HOME, Page.TASKS) && c.detailId == null) {
+                    InkButton("＋ Nova tarefa", onClick = { newTask = true },
+                        modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 18.dp))
+                }
             }
-        } catch (failure: Exception) {
-            error = if (pendingApprovalId != null && failure is HttpException &&
-                failure.code() in listOf(403, 404)) "Sem acesso." else displayError(failure)
-            pendingApprovalId = null
-        }
-    }
-    LaunchedEffect(destination) {
-        destination?.let { target ->
-            if (target.projectId != null) {
-                preferences.setProjectId(target.projectId)
-                selected = target.projectId
-            }
-            if (target.kind == "approval") {
-                page = Page.APPROVALS
-                pendingApprovalId = target.id
-            } else page = Page.DEPLOYS
-            refresh++
-            pushRouting.consumed(target)
-        }
-    }
-    fun action(block: suspend () -> Unit) {
-        if (busy) return
-        scope.launch {
-            busy = true; error = null
-            try { block() } catch (failure: Exception) { error = displayError(failure) }
-            finally { busy = false }
-        }
-    }
-    fun openItem(id: String) = action {
-        detailId = id
-        detail = when (page) {
-            Page.TASKS -> api.task(id)
-            Page.APPROVALS -> api.approval(id)
-            Page.SERVERS -> api.server(id)
-            else -> null
-        }
-        if (page == Page.TASKS) {
-            tree = runCatching { api.tree(id) }.getOrNull()
-            execution = runCatching { api.latest(id) }.getOrNull()
-            val executionId = execution?.str("executionId")
-            if (executionId != null) {
-                execution = runCatching { api.execution(id, executionId) }.getOrNull() ?: execution
-                turns = runCatching { api.turns(id, executionId) }.getOrNull()
-            }
+            PreloBottomBar(tabs, barSelection, onSelect = { target ->
+                if (target == c.page && c.detailId != null) c.closeDetail() else c.open(target)
+            })
         }
     }
 
-    Column(modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("${me.workspaceName} · ${me.email}")
-        val choices = if (me.role == "ADMIN" && adminProjects.isNotEmpty()) adminProjects else me.projects
-        if (choices.isNotEmpty()) {
-            Text("Projeto")
-            choices.forEach { project ->
-                Button(onClick = { action { preferences.setProjectId(project.id); selected = project.id } }, enabled = !busy) {
-                    Text("${if (selected == project.id) "✓ " else ""}${project.name}")
-                }
-            }
-        }
-        Page.entries.forEach { option ->
-            Button(onClick = { page = option }, enabled = page != option) { Text(option.title) }
-        }
-        Row {
-            Button(onClick = { refresh++ }, enabled = !busy) { Text("Atualizar") }
-        }
-        if (busy || data == null && error == null) Text("Carregando…")
-        error?.let { Text(it) }
-
-        if (page == Page.TASKS && detailId == null) {
-            OutlinedTextField(description, { description = it }, label = { Text("Nova tarefa") }, modifier = Modifier.fillMaxWidth())
-            Text("Agentes disponíveis: ${agents.rows().joinToString { it.str("name") ?: it.str("agentId") ?: "Agente" }}")
-            OutlinedTextField(agentId, { agentId = it }, label = { Text("ID do agente (opcional)") }, modifier = Modifier.fillMaxWidth())
-            Button(onClick = { action {
-                val created = api.createTask(CreateTask(description, agentId.ifBlank { null }))
-                val id = requireNotNull(created.str("id")) { "Resposta sem ID de tarefa" }
-                api.execute(id)
-                description = ""; refresh++
-            } }, enabled = !busy && description.isNotBlank()) { Text("Criar e executar") }
-        }
-
-        if (detailId == null) {
-            val items = if (page == Page.HOME) data?.obj()?.get("recent").rows() + data?.obj()?.get("pending").rows()
-                else data.rows()
-            items.forEach { item ->
-                val id = item.str("id") ?: item.str("taskId")
-                Text(item.line(page), modifier = Modifier.padding(vertical = 4.dp))
-                if (id != null && page in listOf(Page.TASKS, Page.APPROVALS, Page.SERVERS)) {
-                    Button(onClick = { openItem(id) }, enabled = !busy) { Text("Abrir") }
-                }
-                if (id != null && page == Page.FILES) {
-                    Button(onClick = { downloadId = id; saveFile.launch(item.str("name") ?: "arquivo") }) {
-                        Text("Baixar")
-                    }
-                }
-            }
-            if (items.isEmpty() && data != null) Text("Nenhum item.")
-        } else {
-            Button(onClick = { detailId = null; detail = null }, enabled = !busy) { Text("Voltar") }
-            detail?.let { Text(it.line(page)) }
-            if (page == Page.TASKS) {
-                execution?.let { Text("Execução: ${it.str("status") ?: "—"}\n${it.str("result") ?: it.str("error") ?: ""}") }
-                tree.rows().forEach { Text("Subtarefa: ${it.str("description") ?: it.str("id") ?: "—"}") }
-                turns.rows().forEach { Text("${it.str("kind") ?: it.str("type") ?: "Turno"}: ${it.str("output") ?: ""}") }
-            }
-            if (page == Page.APPROVALS) {
-                val id = detailId!!
-                Button(onClick = { action {
-                    when (decisions.approve(id)) {
-                        ApproveOutcome.Done -> refresh++
-                        ApproveOutcome.TotpRequired -> stepUpId = id
-                    }
-                } }, enabled = !busy) { Text("Aprovar") }
-                Button(onClick = { action { decisions.deny(id); refresh++ } }, enabled = !busy) { Text("Negar") }
-                if (stepUpId == id) {
-                    Text("Confirme esta aprovação com o código TOTP.")
-                    OutlinedTextField(totp, { totp = it }, label = { Text("Código TOTP") })
-                    Button(onClick = { action { decisions.approve(id, totp); totp = ""; stepUpId = null; refresh++ } },
-                        enabled = !busy && totp.length == 6) { Text("Confirmar aprovação") }
-                }
-            }
-            if (page == Page.SERVERS) {
-                Button(onClick = { action { detail = api.healthCheck(detailId!!); } }, enabled = !busy) {
-                    Text("Verificar saúde")
-                }
+    if (newTask) NewTaskSheet(c, onDismiss = { newTask = false })
+    if (choosingProject) PaperSheet(onDismiss = { choosingProject = false }) {
+        Kicker("Trocar de projeto")
+        Text("Em qual projeto você vai trabalhar?", Modifier.padding(top = 4.dp, bottom = 12.dp),
+            style = androidx.compose.material3.MaterialTheme.typography.titleLarge, color = Prelo.colors.ink)
+        Rule(strong = true)
+        c.projects.forEach { project ->
+            ProjectRow(project.name, selected = project.id == c.selected, enabled = !c.busy) {
+                c.selectProject(project.id); choosingProject = false
             }
         }
     }
 }
 
-private fun JsonElement?.obj(): JsonObject? = this?.takeIf { it.isJsonObject }?.asJsonObject
-private fun JsonElement?.str(name: String): String? = this.obj()?.get(name)?.takeIf { !it.isJsonNull }?.let {
-    if (it.isJsonPrimitive) it.asString else null
-}
-private fun JsonElement?.rows(): List<JsonElement> = when {
-    this == null || isJsonNull -> emptyList()
-    isJsonArray -> asJsonArray.toList()
-    isJsonObject -> (obj()?.get("items") ?: obj()?.get("files")).rows()
-    else -> emptyList()
-}
-private fun JsonElement.line(page: Page): String = when (page) {
-    Page.TASKS -> "${str("description") ?: "Tarefa"} · ${str("status") ?: "—"}"
-    Page.APPROVALS -> "${str("scope") ?: "Aprovação"} · ${str("status") ?: "—"}"
-    Page.SERVERS -> "${str("name") ?: "Máquina"} · ${str("lastStatus") ?: "—"}"
-    Page.DEPLOYS -> {
-        val payload = obj()?.get("payload")
-        val result = obj()?.get("result")
-        "${str("impact") ?: "Deploy"} · ${str("status") ?: "—"}\n" +
-            "${payload.str("repository") ?: ""}@${payload.str("commitSha")?.take(8) ?: ""} · " +
-            "${payload.str("environment") ?: ""} → ${payload.str("target") ?: ""}\n" +
-            "${result.str("status") ?: ""} ${result.str("url") ?: ""}"
-    }
-    Page.FILES -> "${str("name") ?: "Arquivo"} · ${str("id") ?: ""}"
-    Page.PIPELINE -> "${str("description") ?: "Pipeline"} · ${str("pipelineStatus") ?: "—"}"
-    Page.HOME -> "${str("title") ?: "Atividade"} · ${str("status") ?: str("detail") ?: ""}"
-}
-private fun displayError(failure: Exception): String = when (failure) {
-    is HttpException -> when (failure.code()) {
-        401 -> "Entre novamente para continuar."
-        403 -> "Sem acesso."
-        404 -> "Recurso não encontrado."
-        else -> "Erro do servidor (${failure.code()})."
-    }
-    else -> "Sem conexão com o Prelo."
+/** Shared top of every section list: global error / loading, then the section's own items. */
+internal fun LazyListScope.pageState(c: PreloController, hasData: Boolean) {
+    c.error?.let { message -> item(key = "error") { ErrorClipping(message, Modifier.padding(top = 12.dp), onRetry = { c.reload() }) } }
+    if (c.loading && !hasData && c.error == null) item(key = "loading") { PressSkeleton(Modifier.padding(top = 8.dp)) }
 }
