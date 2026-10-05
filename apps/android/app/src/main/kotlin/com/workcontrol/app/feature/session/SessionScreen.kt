@@ -12,6 +12,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -23,6 +24,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ProcessLifecycleOwner
 import com.google.gson.Gson
 import com.workcontrol.app.data.auth.AuthSession
 import com.workcontrol.app.data.auth.DevicePreferences
@@ -31,6 +35,7 @@ import com.workcontrol.app.data.prelo.Me
 import com.workcontrol.app.data.prelo.MobileSession
 import com.workcontrol.app.data.prelo.PreloApi
 import com.workcontrol.app.data.prelo.PreloResourceApi
+import com.workcontrol.app.data.prelo.PreloEvents
 import com.workcontrol.app.data.prelo.ApprovalDecisions
 import com.workcontrol.app.feature.prelo.PreloDashboard
 import kotlinx.coroutines.launch
@@ -38,7 +43,8 @@ import retrofit2.HttpException
 
 @Composable
 fun SessionScreen(activity: FragmentActivity, session: AuthSession, api: PreloApi,
-    resources: PreloResourceApi, preferences: DevicePreferences, decisions: ApprovalDecisions) {
+    resources: PreloResourceApi, preferences: DevicePreferences, decisions: ApprovalDecisions,
+    events: PreloEvents) {
     val phase by session.phase.collectAsState()
     val scope = rememberCoroutineScope()
     var email by remember { mutableStateOf("") }
@@ -49,6 +55,16 @@ fun SessionScreen(activity: FragmentActivity, session: AuthSession, api: PreloAp
     var me by remember { mutableStateOf<Me?>(null) }
     var devices by remember { mutableStateOf<List<MobileSession>>(emptyList()) }
     LaunchedEffect(Unit) { session.start() }
+    DisposableEffect(phase) {
+        val lifecycle = ProcessLifecycleOwner.get().lifecycle
+        val observer = LifecycleEventObserver { _, event ->
+            if (phase == SessionPhase.Ready && event == Lifecycle.Event.ON_START) events.start()
+            if (event == Lifecycle.Event.ON_STOP) events.stop()
+        }
+        lifecycle.addObserver(observer)
+        if (phase == SessionPhase.Ready && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) events.start()
+        onDispose { lifecycle.removeObserver(observer); events.stop() }
+    }
     LaunchedEffect(phase) {
         if (phase == SessionPhase.Ready) {
             try { me = api.me() }
@@ -98,7 +114,7 @@ fun SessionScreen(activity: FragmentActivity, session: AuthSession, api: PreloAp
             SessionPhase.Ready -> {
                 if (me == null) CircularProgressIndicator()
                 me?.let { profile ->
-                    PreloDashboard(profile, resources, preferences, decisions, Modifier.weight(1f))
+                    PreloDashboard(profile, resources, preferences, decisions, events, Modifier.weight(1f))
                     Button(onClick = { submit { devices = api.sessions() } }, enabled = !busy) {
                         Text("Aparelhos conectados")
                     }

@@ -12,6 +12,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -29,8 +30,13 @@ import com.workcontrol.app.data.prelo.ApproveOutcome
 import com.workcontrol.app.data.prelo.CreateTask
 import com.workcontrol.app.data.prelo.Me
 import com.workcontrol.app.data.prelo.PreloResourceApi
+import com.workcontrol.app.data.prelo.PreloEvents
 import com.workcontrol.app.data.prelo.Project
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.collect
 import retrofit2.HttpException
 
 private enum class Page(val title: String) {
@@ -39,9 +45,10 @@ private enum class Page(val title: String) {
 }
 
 /** Every displayed item comes from the Prelo API; local state only selects a view. */
+@OptIn(kotlinx.coroutines.FlowPreview::class)
 @Composable
 fun PreloDashboard(me: Me, api: PreloResourceApi, preferences: DevicePreferences,
-    decisions: ApprovalDecisions, modifier: Modifier = Modifier) {
+    decisions: ApprovalDecisions, events: PreloEvents, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     var page by remember { mutableStateOf(Page.HOME) }
     var selected by remember { mutableStateOf<String?>(null) }
@@ -60,6 +67,25 @@ fun PreloDashboard(me: Me, api: PreloResourceApi, preferences: DevicePreferences
     var stepUpId by remember { mutableStateOf<String?>(null) }
     var totp by remember { mutableStateOf("") }
     var adminProjects by remember { mutableStateOf<List<Project>>(emptyList()) }
+    val connected by events.connected.collectAsState()
+
+    LaunchedEffect(page, selected, detailId) {
+        events.events.filter { event ->
+            (event.projectId == null || event.projectId == selected) && when (event.kind) {
+                "resync" -> true
+                "task", "execution" -> page in listOf(Page.HOME, Page.TASKS, Page.PIPELINE) &&
+                    (page != Page.TASKS || detailId == null || event.id == detailId ||
+                        event.taskId == detailId || event.parentId == detailId)
+                "approval" -> page in listOf(Page.HOME, Page.APPROVALS) &&
+                    (page != Page.APPROVALS || detailId == null || event.id == detailId)
+                "action" -> page == Page.DEPLOYS
+                else -> false
+            }
+        }.debounce(150).collect { refresh++ }
+    }
+    LaunchedEffect(page, selected, connected) {
+        while (true) { delay(if (connected) 45_000 else 10_000); refresh++ }
+    }
 
     LaunchedEffect(me.userId) {
         val remembered = preferences.projectId()
@@ -75,8 +101,11 @@ fun PreloDashboard(me: Me, api: PreloResourceApi, preferences: DevicePreferences
         }
         if (selected != remembered) preferences.setProjectId(selected)
     }
+    LaunchedEffect(page, selected) {
+        detail = null; detailId = null; execution = null; tree = null; turns = null
+    }
     LaunchedEffect(page, selected, refresh) {
-        data = null; detail = null; detailId = null; execution = null; tree = null; turns = null; error = null
+        data = null; error = null
         try {
             data = when (page) {
                 Page.HOME -> api.home()
@@ -88,6 +117,22 @@ fun PreloDashboard(me: Me, api: PreloResourceApi, preferences: DevicePreferences
                 Page.FILES -> selected?.let { api.files(it) }
             }
             if (page == Page.TASKS) agents = runCatching { api.agents() }.getOrNull()
+            detailId?.let { id ->
+                detail = when (page) {
+                    Page.TASKS -> api.task(id)
+                    Page.APPROVALS -> api.approval(id)
+                    Page.SERVERS -> api.server(id)
+                    else -> null
+                }
+                if (page == Page.TASKS) {
+                    execution = runCatching { api.latest(id) }.getOrNull()
+                    val executionId = execution?.str("executionId")
+                    if (executionId != null) {
+                        execution = runCatching { api.execution(id, executionId) }.getOrNull() ?: execution
+                        turns = runCatching { api.turns(id, executionId) }.getOrNull()
+                    }
+                }
+            }
         } catch (failure: Exception) { error = displayError(failure) }
     }
     fun action(block: suspend () -> Unit) {
