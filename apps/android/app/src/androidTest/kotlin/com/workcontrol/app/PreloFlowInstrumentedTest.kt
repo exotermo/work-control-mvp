@@ -2,10 +2,10 @@ package com.workcontrol.app
 
 import androidx.activity.compose.setContent
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.fragment.app.FragmentActivity
@@ -52,18 +52,19 @@ class PreloFlowInstrumentedTest {
     @Test fun loginWithTotpOpensTasksFromPrelo() {
         showScreen(tasksForbidden = false)
         login()
-        compose.onNodeWithText("Tarefas").performScrollTo().performClick()
-        compose.waitUntil(5_000) { compose.onAllNodesWithText("Inspecionar deploy · QUEUED").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("Inspecionar deploy · QUEUED").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Tarefas").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("Inspecionar deploy").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Inspecionar deploy").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Situação: NA FILA").assertIsDisplayed()
         assertTrue(server.requestCount >= 3)
     }
 
     @Test fun forbiddenTasksShowServerDecision() {
         showScreen(tasksForbidden = true)
         login()
-        compose.onNodeWithText("Tarefas").performScrollTo().performClick()
+        compose.onNodeWithText("Tarefas").performClick()
         compose.waitUntil(5_000) { compose.onAllNodesWithText("Sem acesso.").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("Sem acesso.").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Sem acesso.").assertIsDisplayed()
     }
 
     @Test fun insecureDeviceShowsSettingsBeforeTotpVerification() {
