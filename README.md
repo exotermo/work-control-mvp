@@ -13,6 +13,23 @@ Aplicativo Android do **Prelo Control**. O Prelo é a única fonte de identidade
 
 O app não executa deploy e não hospeda backend próprio. Terminal, diff de código e métricas CPU/RAM não aparecem porque não têm recurso equivalente no Prelo.
 
+## Design — "Jornal do futuro"
+
+Mesma identidade do dashboard web do Prelo (`prelo-dashboard/src/index.css`): papel creme, recortes de jornal com
+borda rasgada e fita, manchetes em Fraunces, carimbos de status e movimento de revista (virar página, recorte caindo,
+carimbo batendo, papel desdobrando). Por cima, uma camada de telemetria: faixa "EDIÇÃO · AO VIVO" com pulso de radar,
+saída do agente como teletipo, cantoneiras de HUD ao tocar, grade de pontos e varredura quando um evento ao vivo chega.
+
+- Duas edições: **papel** (claro) e **noturna** ("papel carbono"); segue o sistema ou a escolha em Mais → Sua conta.
+  Todo texto tem contraste ≥ 4,5:1 nas duas.
+- Tokens e tipografia em `core/designsystem/`, componentes em `core/components/`, telas em `feature/prelo/screens/`.
+  A lógica (projeto, SSE, polling, push, step-up) fica em `feature/prelo/PreloController.kt`, separada da UI.
+- "Remover animações" do Android desliga toda animação decorativa.
+- Fontes OFL embutidas em `res/font/` (Fraunces, Work Sans, Courier Prime, JetBrains Mono); licenças em
+  `apps/android/third_party/fonts/`.
+- Revisão visual: `DesignTourTest` percorre todas as telas com dados de exemplo nas duas edições e salva capturas em
+  `/sdcard/Android/data/com.workcontrol.app.debug/files/tour/` (`adb pull` para ver).
+
 ## Arquitetura
 
 ```text
