@@ -3,6 +3,7 @@ package com.workcontrol.app.data.auth
 import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.UUID
@@ -13,6 +14,7 @@ import kotlinx.coroutines.flow.first
 private val Context.preloPreferences by preferencesDataStore(name = "prelo_device")
 private val DEVICE_ID = stringPreferencesKey("device_id")
 private val PROJECT_ID = stringPreferencesKey("project_id")
+private val PUSH_WANTED = booleanPreferencesKey("push_wanted")
 
 @Singleton
 class DevicePreferences @Inject constructor(@ApplicationContext private val context: Context) {
@@ -28,4 +30,6 @@ class DevicePreferences @Inject constructor(@ApplicationContext private val cont
     suspend fun setProjectId(id: String?) {
         context.preloPreferences.edit { if (id == null) it.remove(PROJECT_ID) else it[PROJECT_ID] = id }
     }
+    suspend fun pushWanted(): Boolean = context.preloPreferences.data.first()[PUSH_WANTED] ?: true
+    suspend fun setPushWanted(value: Boolean) { context.preloPreferences.edit { it[PUSH_WANTED] = value } }
 }

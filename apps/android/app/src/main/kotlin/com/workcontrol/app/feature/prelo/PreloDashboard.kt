@@ -31,6 +31,7 @@ import com.workcontrol.app.data.prelo.CreateTask
 import com.workcontrol.app.data.prelo.Me
 import com.workcontrol.app.data.prelo.PreloResourceApi
 import com.workcontrol.app.data.prelo.PreloEvents
+import com.workcontrol.app.data.push.PushRouting
 import com.workcontrol.app.data.prelo.Project
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
@@ -48,7 +49,7 @@ private enum class Page(val title: String) {
 @OptIn(kotlinx.coroutines.FlowPreview::class)
 @Composable
 fun PreloDashboard(me: Me, api: PreloResourceApi, preferences: DevicePreferences,
-    decisions: ApprovalDecisions, events: PreloEvents, modifier: Modifier = Modifier) {
+    decisions: ApprovalDecisions, events: PreloEvents, pushRouting: PushRouting, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     var page by remember { mutableStateOf(Page.HOME) }
     var selected by remember { mutableStateOf<String?>(null) }
@@ -67,6 +68,8 @@ fun PreloDashboard(me: Me, api: PreloResourceApi, preferences: DevicePreferences
     var stepUpId by remember { mutableStateOf<String?>(null) }
     var totp by remember { mutableStateOf("") }
     var adminProjects by remember { mutableStateOf<List<Project>>(emptyList()) }
+    var pendingApprovalId by remember { mutableStateOf<String?>(null) }
+    val destination by pushRouting.destination.collectAsState()
     val connected by events.connected.collectAsState()
 
     LaunchedEffect(page, selected, detailId) {
@@ -117,13 +120,14 @@ fun PreloDashboard(me: Me, api: PreloResourceApi, preferences: DevicePreferences
                 Page.FILES -> selected?.let { api.files(it) }
             }
             if (page == Page.TASKS) agents = runCatching { api.agents() }.getOrNull()
-            detailId?.let { id ->
+            (detailId ?: pendingApprovalId)?.let { id ->
                 detail = when (page) {
                     Page.TASKS -> api.task(id)
                     Page.APPROVALS -> api.approval(id)
                     Page.SERVERS -> api.server(id)
                     else -> null
                 }
+                if (page == Page.APPROVALS) { detailId = id; pendingApprovalId = null }
                 if (page == Page.TASKS) {
                     execution = runCatching { api.latest(id) }.getOrNull()
                     val executionId = execution?.str("executionId")
@@ -133,7 +137,25 @@ fun PreloDashboard(me: Me, api: PreloResourceApi, preferences: DevicePreferences
                     }
                 }
             }
-        } catch (failure: Exception) { error = displayError(failure) }
+        } catch (failure: Exception) {
+            error = if (pendingApprovalId != null && failure is HttpException &&
+                failure.code() in listOf(403, 404)) "Sem acesso." else displayError(failure)
+            pendingApprovalId = null
+        }
+    }
+    LaunchedEffect(destination) {
+        destination?.let { target ->
+            if (target.projectId != null) {
+                preferences.setProjectId(target.projectId)
+                selected = target.projectId
+            }
+            if (target.kind == "approval") {
+                page = Page.APPROVALS
+                pendingApprovalId = target.id
+            } else page = Page.DEPLOYS
+            refresh++
+            pushRouting.consumed(target)
+        }
     }
     fun action(block: suspend () -> Unit) {
         if (busy) return

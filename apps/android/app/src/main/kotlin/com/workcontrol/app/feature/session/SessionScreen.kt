@@ -1,5 +1,11 @@
 package com.workcontrol.app.feature.session
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -38,13 +44,15 @@ import com.workcontrol.app.data.prelo.PreloResourceApi
 import com.workcontrol.app.data.prelo.PreloEvents
 import com.workcontrol.app.data.prelo.ApprovalDecisions
 import com.workcontrol.app.feature.prelo.PreloDashboard
+import com.workcontrol.app.data.push.PushRouting
+import com.workcontrol.app.data.push.PushRegistrar
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
 
 @Composable
 fun SessionScreen(activity: FragmentActivity, session: AuthSession, api: PreloApi,
     resources: PreloResourceApi, preferences: DevicePreferences, decisions: ApprovalDecisions,
-    events: PreloEvents) {
+    events: PreloEvents, pushRouting: PushRouting, pushRegistrar: PushRegistrar) {
     val phase by session.phase.collectAsState()
     val scope = rememberCoroutineScope()
     var email by remember { mutableStateOf("") }
@@ -54,6 +62,9 @@ fun SessionScreen(activity: FragmentActivity, session: AuthSession, api: PreloAp
     var busy by remember { mutableStateOf(false) }
     var me by remember { mutableStateOf<Me?>(null) }
     var devices by remember { mutableStateOf<List<MobileSession>>(emptyList()) }
+    var pushWanted by remember { mutableStateOf(true) }
+    val serverPush by pushRegistrar.serverEnabled.collectAsState()
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     LaunchedEffect(Unit) { session.start() }
     DisposableEffect(phase) {
         val lifecycle = ProcessLifecycleOwner.get().lifecycle
@@ -72,6 +83,8 @@ fun SessionScreen(activity: FragmentActivity, session: AuthSession, api: PreloAp
                 if (failure is HttpException && failure.code() == 401) session.sessionEnded()
                 else error = authError(failure)
             }
+            pushWanted = preferences.pushWanted()
+            pushRegistrar.onLogin()
         } else { me = null; devices = emptyList() }
     }
     fun submit(block: suspend () -> Unit) {
@@ -114,7 +127,19 @@ fun SessionScreen(activity: FragmentActivity, session: AuthSession, api: PreloAp
             SessionPhase.Ready -> {
                 if (me == null) CircularProgressIndicator()
                 me?.let { profile ->
-                    PreloDashboard(profile, resources, preferences, decisions, events, Modifier.weight(1f))
+                    PreloDashboard(profile, resources, preferences, decisions, events, pushRouting, Modifier.weight(1f))
+                    if (Build.VERSION.SDK_INT >= 33 &&
+                        ContextCompat.checkSelfPermission(activity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                        Text("Ative notificações para receber alertas de aprovações e deploys.")
+                        Button(onClick = { permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }) {
+                            Text("Permitir notificações")
+                        }
+                    }
+                    if (!serverPush) Text("Notificações ainda não ativadas no servidor.")
+                    Button(onClick = { submit {
+                        if (pushRegistrar.setWanted(!pushWanted)) pushWanted = !pushWanted
+                        else error = "Não foi possível alterar as notificações no servidor."
+                    } }, enabled = !busy) { Text(if (pushWanted) "Desligar notificações" else "Ligar notificações") }
                     Button(onClick = { submit { devices = api.sessions() } }, enabled = !busy) {
                         Text("Aparelhos conectados")
                     }

@@ -4,11 +4,15 @@ import com.google.gson.JsonElement
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
+import retrofit2.http.PUT
+import retrofit2.http.DELETE
 import retrofit2.http.Path
 import retrofit2.http.Query
 
 /** Read models stay as server JSON; the server owns state and authorization. */
 interface PreloResourceApi {
+    @PUT("api/v1/me/push-token") suspend fun registerPush(@Body body: PushToken): PushRegistration
+    @DELETE("api/v1/me/push-token") suspend fun deletePush()
     @GET("api/v1/home") suspend fun home(): JsonElement
     @GET("api/v1/projects") suspend fun projects(): JsonElement
     @GET("api/v1/agents") suspend fun agents(): JsonElement
@@ -39,3 +43,5 @@ interface PreloResourceApi {
 }
 
 data class ApprovalDecision(val totpCode: String? = null)
+data class PushToken(val token: String)
+data class PushRegistration(val registered: Boolean, val pushEnabled: Boolean)

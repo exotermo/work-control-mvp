@@ -28,6 +28,9 @@ plugins {
     alias(libs.plugins.hilt)
 }
 
+val hasGoogleServices = file("google-services.json").exists()
+if (hasGoogleServices) apply(plugin = "com.google.gms.google-services")
+
 android {
     namespace = "com.workcontrol.app"
     compileSdk = 35
@@ -40,6 +43,7 @@ android {
         versionName = "0.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("boolean", "HAS_FIREBASE_CONFIG", hasGoogleServices.toString())
     }
 
     buildTypes {
@@ -123,6 +127,8 @@ dependencies {
     implementation(libs.retrofit.converter.gson)
     implementation(libs.okhttp.core)
     implementation(libs.okhttp.sse)
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.messaging)
     implementation(libs.okhttp.logging.interceptor)
 
     testImplementation(libs.junit)
