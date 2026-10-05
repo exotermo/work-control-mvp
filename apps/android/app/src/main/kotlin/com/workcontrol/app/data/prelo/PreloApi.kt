@@ -1,6 +1,7 @@
 package com.workcontrol.app.data.prelo
 
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.Header
 import retrofit2.http.POST
@@ -24,6 +25,12 @@ interface PreloApi {
 
     @GET("api/v1/me")
     suspend fun me(): Me
+
+    @GET("api/v1/me/sessions")
+    suspend fun sessions(): List<MobileSession>
+
+    @DELETE("api/v1/me/sessions/{id}")
+    suspend fun revokeSession(@Path("id") id: String)
 
     @GET("api/v1/tasks")
     suspend fun tasks(@Header("X-Project-Id") projectId: String?): List<Task>
@@ -60,6 +67,8 @@ data class MobileTokens(val accessToken: String, val expiresIn: Int, val refresh
 data class Me(val userId: String, val email: String, val role: String, val scopes: List<String>,
     val workspaceId: String, val workspaceName: String, val projects: List<Project>, val session: Session)
 data class Session(val kind: String, val deviceId: String?, val deviceName: String?)
+data class MobileSession(val id: String, val deviceName: String, val platform: String,
+    val createdAt: String, val lastUsedAt: String, val expiresAt: String, val current: Boolean)
 data class Project(val id: String, val name: String, val clientId: String?)
 data class Task(val id: String, val description: String, val status: String, val agentId: String,
     val createdAt: String, val projectId: String?)
@@ -72,9 +81,13 @@ data class Server(val id: String, val projectId: String?, val name: String, val 
     val lastStatus: String)
 data class Approval(val id: String, val scope: String, val status: String, val expiresAt: String,
     val shortCode: String?)
-data class ActionRequest(val id: String, val projectId: String, val kind: String,
-    val payload: DeployPayload, val payloadHash: String, val status: String,
-    val impact: String, val result: ActionResult?)
+data class ActionRequest(val id: String, val workspaceId: String, val projectId: String,
+    val kind: String, val payload: DeployPayload, val payloadHash: String, val risk: String,
+    val impact: String, val requestedBy: String, val idempotencyKey: String,
+    val status: String, val approvalId: String, val approvalCode: String,
+    val expiresAt: String, val decidedAt: String?, val decidedBy: String?,
+    val result: ActionResult?, val createdAt: String)
 data class DeployPayload(val repository: String, val commitSha: String, val environment: String,
     val target: String, val app: String, val deployRequestId: String)
-data class ActionResult(val status: String, val message: String?, val url: String?, val sequence: Long)
+data class ActionResult(val status: String, val sequence: Long, val message: String?,
+    val url: String?, val artifactDigest: String?, val reportedAt: String)

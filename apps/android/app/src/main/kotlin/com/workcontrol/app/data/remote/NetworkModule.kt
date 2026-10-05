@@ -5,6 +5,8 @@ import com.google.gson.GsonBuilder
 import com.workcontrol.app.BuildConfig
 import com.workcontrol.app.data.auth.AccessTokenProvider
 import com.workcontrol.app.data.auth.InMemoryAccessTokenStore
+import com.workcontrol.app.data.auth.PreloAuthApi
+import com.workcontrol.app.data.auth.PreloAuthenticator
 import com.workcontrol.app.data.prelo.PreloApi
 import dagger.Module
 import dagger.Provides
@@ -27,7 +29,7 @@ annotation class ApiBaseUrl
 
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
-annotation class PreloRetrofit
+annotation class RawPreloRetrofit
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -48,13 +50,14 @@ object NetworkModule {
     @Provides
     @Singleton
     @ApiBaseUrl
-    fun provideApiBaseUrl(): HttpUrl = BuildConfig.API_BASE_URL.toHttpUrl()
+    fun provideApiBaseUrl(): HttpUrl = BuildConfig.PRELO_BASE_URL.toHttpUrl()
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(authInterceptor: BearerAuthInterceptor): OkHttpClient {
+    fun provideOkHttpClient(authInterceptor: BearerAuthInterceptor, authenticator: PreloAuthenticator): OkHttpClient {
         val builder = OkHttpClient.Builder()
             .addInterceptor(authInterceptor)
+            .authenticator(authenticator)
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
@@ -94,14 +97,18 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    @PreloRetrofit
-    fun providePreloRetrofit(client: OkHttpClient, gson: Gson): Retrofit = Retrofit.Builder()
+    @RawPreloRetrofit
+    fun provideRawPreloRetrofit(gson: Gson): Retrofit = Retrofit.Builder()
         .baseUrl(BuildConfig.PRELO_BASE_URL.toHttpUrl())
-        .client(client)
+        .client(OkHttpClient.Builder().connectTimeout(15, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).build())
         .addConverterFactory(GsonConverterFactory.create(gson))
         .build()
 
     @Provides
     @Singleton
-    fun providePreloApi(@PreloRetrofit retrofit: Retrofit): PreloApi = retrofit.create(PreloApi::class.java)
+    fun providePreloAuthApi(@RawPreloRetrofit retrofit: Retrofit): PreloAuthApi = retrofit.create(PreloAuthApi::class.java)
+
+    @Provides
+    @Singleton
+    fun providePreloApi(retrofit: Retrofit): PreloApi = retrofit.create(PreloApi::class.java)
 }

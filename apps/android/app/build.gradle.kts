@@ -45,11 +45,6 @@ android {
     buildTypes {
         release {
             buildConfigField("String", "PRELO_BASE_URL", apiBaseUrl("PRELO_BASE_URL", "https://prelo.invalid/").asBuildConfigString())
-            buildConfigField(
-                "String",
-                "API_BASE_URL",
-                apiBaseUrl("API_BASE_URL", "https://work-control.xandehome.api.br/").asBuildConfigString(),
-            )
             buildConfigField("boolean", "ENABLE_HTTP_LOGGING", "false")
             isMinifyEnabled = true
             isShrinkResources = true
@@ -57,11 +52,6 @@ android {
         }
         debug {
             buildConfigField("String", "PRELO_BASE_URL", apiBaseUrl("PRELO_BASE_URL_OVERRIDE", "http://localhost:8082/").asBuildConfigString())
-            buildConfigField(
-                "String",
-                "API_BASE_URL",
-                apiBaseUrl("BASE_URL_OVERRIDE", "http://localhost:8080/").asBuildConfigString(),
-            )
             buildConfigField("boolean", "ENABLE_HTTP_LOGGING", "true")
             isMinifyEnabled = false
             applicationIdSuffix = ".debug"
@@ -125,6 +115,8 @@ dependencies {
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
     implementation(libs.hilt.navigation.compose)
+    implementation(libs.androidx.datastore.preferences)
+    implementation(libs.androidx.biometric)
 
     implementation(libs.retrofit.core)
     implementation(libs.retrofit.converter.gson)
