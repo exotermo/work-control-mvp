@@ -34,6 +34,7 @@ import com.workcontrol.app.data.prelo.CreateTask
 import com.workcontrol.app.data.prelo.Me
 import com.workcontrol.app.data.prelo.PreloResourceApi
 import com.workcontrol.app.data.prelo.PreloEvents
+import com.workcontrol.app.data.prelo.EventFeed
 import com.workcontrol.app.data.push.PushRouting
 import com.workcontrol.app.data.prelo.Project
 import kotlinx.coroutines.launch
@@ -54,7 +55,7 @@ private enum class Page(val title: String) {
 @OptIn(kotlinx.coroutines.FlowPreview::class)
 @Composable
 fun PreloDashboard(me: Me, api: PreloResourceApi, preferences: DevicePreferences,
-    decisions: ApprovalDecisions, events: PreloEvents, pushRouting: PushRouting, modifier: Modifier = Modifier) {
+    decisions: ApprovalDecisions, events: EventFeed, pushRouting: PushRouting, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var page by remember { mutableStateOf(Page.HOME) }

@@ -18,23 +18,29 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
+interface PushControl {
+    val serverEnabled: StateFlow<Boolean>
+    suspend fun onLogin()
+    suspend fun setWanted(value: Boolean): Boolean
+}
+
 @Singleton
 class PushRegistrar @Inject constructor(
     private val api: PreloResourceApi,
     private val session: AuthSession,
     private val preferences: DevicePreferences,
-) {
+) : PushControl {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var pendingToken: String? = null
     private val mutableServerEnabled = MutableStateFlow(false)
-    val serverEnabled: StateFlow<Boolean> = mutableServerEnabled
+    override val serverEnabled: StateFlow<Boolean> = mutableServerEnabled
 
     fun onNewToken(token: String) {
         pendingToken = token
         if (BuildConfig.HAS_FIREBASE_CONFIG && session.phase.value == SessionPhase.Ready) scope.launch { register(token) }
     }
 
-    suspend fun onLogin() {
+    override suspend fun onLogin() {
         if (!BuildConfig.HAS_FIREBASE_CONFIG || !preferences.pushWanted()) return
         val token = pendingToken ?: suspendCancellableCoroutine<String?> { continuation ->
             FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
@@ -54,7 +60,7 @@ class PushRegistrar @Inject constructor(
         pendingToken = null
     }
 
-    suspend fun setWanted(value: Boolean): Boolean {
+    override suspend fun setWanted(value: Boolean): Boolean {
         if (!value) {
             try { api.deletePush() } catch (_: Exception) { return false }
             preferences.setPushWanted(false)

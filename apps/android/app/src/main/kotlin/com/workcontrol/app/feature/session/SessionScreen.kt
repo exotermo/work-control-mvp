@@ -35,6 +35,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.google.gson.Gson
 import com.workcontrol.app.data.auth.AuthSession
+import com.workcontrol.app.data.auth.SessionController
 import com.workcontrol.app.data.auth.DevicePreferences
 import com.workcontrol.app.data.auth.SessionPhase
 import com.workcontrol.app.data.prelo.Me
@@ -42,17 +43,19 @@ import com.workcontrol.app.data.prelo.MobileSession
 import com.workcontrol.app.data.prelo.PreloApi
 import com.workcontrol.app.data.prelo.PreloResourceApi
 import com.workcontrol.app.data.prelo.PreloEvents
+import com.workcontrol.app.data.prelo.EventFeed
 import com.workcontrol.app.data.prelo.ApprovalDecisions
 import com.workcontrol.app.feature.prelo.PreloDashboard
 import com.workcontrol.app.data.push.PushRouting
 import com.workcontrol.app.data.push.PushRegistrar
+import com.workcontrol.app.data.push.PushControl
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
 
 @Composable
-fun SessionScreen(activity: FragmentActivity, session: AuthSession, api: PreloApi,
+fun SessionScreen(activity: FragmentActivity, session: SessionController, api: PreloApi,
     resources: PreloResourceApi, preferences: DevicePreferences, decisions: ApprovalDecisions,
-    events: PreloEvents, pushRouting: PushRouting, pushRegistrar: PushRegistrar) {
+    events: EventFeed, pushRouting: PushRouting, pushRegistrar: PushControl) {
     val phase by session.phase.collectAsState()
     val scope = rememberCoroutineScope()
     var email by remember { mutableStateOf("") }

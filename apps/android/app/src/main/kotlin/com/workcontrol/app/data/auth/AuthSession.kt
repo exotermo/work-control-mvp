@@ -26,6 +26,16 @@ sealed interface SessionPhase {
     data object Ready : SessionPhase
 }
 
+interface SessionController {
+    val phase: StateFlow<SessionPhase>
+    suspend fun start()
+    suspend fun login(email: String, password: String)
+    suspend fun verify(activity: FragmentActivity, code: String): Boolean
+    suspend fun unlockAndRestore(activity: FragmentActivity): Boolean
+    suspend fun logout(activity: FragmentActivity): Boolean
+    fun sessionEnded()
+}
+
 @Singleton
 class AuthSession @Inject constructor(
     private val api: PreloAuthApi,
@@ -34,20 +44,20 @@ class AuthSession @Inject constructor(
     private val access: InMemoryAccessTokenStore,
     private val localUnlock: LocalUnlock,
     private val gson: Gson,
-) {
+) : SessionController {
     private val refreshMutex = Mutex()
     private val mutablePhase = MutableStateFlow<SessionPhase>(SessionPhase.Login())
-    val phase: StateFlow<SessionPhase> = mutablePhase
+    override val phase: StateFlow<SessionPhase> = mutablePhase
     private var challenge: String? = null
     private var restoreAttempted = false
 
-    suspend fun start() {
+    override suspend fun start() {
         if (restoreAttempted) return
         restoreAttempted = true
         mutablePhase.value = if (withContext(Dispatchers.IO) { refreshStore.exists() }) SessionPhase.Unlock else SessionPhase.Login()
     }
 
-    suspend fun login(email: String, password: String) {
+    override suspend fun login(email: String, password: String) {
         val response = api.login(LoginRequest(email.trim(), password))
         challenge = response.challenge
         mutablePhase.value = when (response.nextStep) {
@@ -57,7 +67,7 @@ class AuthSession @Inject constructor(
         }
     }
 
-    suspend fun verify(activity: FragmentActivity, code: String): Boolean {
+    override suspend fun verify(activity: FragmentActivity, code: String): Boolean {
         val pending = challenge ?: return false
         val tokens = api.verify(MobileVerifyRequest(pending, code.trim(), device.deviceId(), Build.MODEL))
         if (!localUnlock.authenticate(activity)) {
@@ -78,7 +88,7 @@ class AuthSession @Inject constructor(
         return true
     }
 
-    suspend fun unlockAndRestore(activity: FragmentActivity): Boolean {
+    override suspend fun unlockAndRestore(activity: FragmentActivity): Boolean {
         if (!localUnlock.authenticate(activity)) return false
         return refreshMutex.withLock { refreshLocked() != null }
     }
@@ -112,7 +122,7 @@ class AuthSession @Inject constructor(
         return next.accessToken
     }
 
-    suspend fun logout(activity: FragmentActivity): Boolean {
+    override suspend fun logout(activity: FragmentActivity): Boolean {
         if (!localUnlock.authenticate(activity)) return false
         val old = runCatching { withContext(Dispatchers.IO) { refreshStore.read() } }.getOrNull()
         val token = access.accessToken()
@@ -126,7 +136,7 @@ class AuthSession @Inject constructor(
         return true
     }
 
-    fun sessionEnded() = clearLocal()
+    override fun sessionEnded() = clearLocal()
 
     private fun clearLocal(notice: String? = null) {
         access.clear()

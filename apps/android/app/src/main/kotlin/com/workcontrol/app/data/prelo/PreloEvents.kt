@@ -30,6 +30,13 @@ import kotlin.coroutines.resume
 data class PreloEvent(val kind: String, val id: String?, val projectId: String?,
     val taskId: String?, val parentId: String?, val status: String?)
 
+interface EventFeed {
+    val connected: StateFlow<Boolean>
+    val events: SharedFlow<PreloEvent>
+    fun start()
+    fun stop()
+}
+
 fun parsePreloEvent(type: String?, data: String): PreloEvent? = runCatching {
     val json = JsonParser.parseString(data).asJsonObject
     fun value(name: String): String? = json.get(name)?.takeIf { !it.isJsonNull && it.isJsonPrimitive }?.asString
@@ -44,16 +51,16 @@ class PreloEvents @Inject constructor(
     private val access: InMemoryAccessTokenStore,
     private val session: AuthSession,
     @com.workcontrol.app.data.remote.ApiBaseUrl private val baseUrl: okhttp3.HttpUrl,
-) {
+) : EventFeed {
     private val factory = EventSources.createFactory(client.newBuilder().readTimeout(0, java.util.concurrent.TimeUnit.SECONDS).build())
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var job: Job? = null
     private val mutableConnected = MutableStateFlow(false)
-    val connected: StateFlow<Boolean> = mutableConnected
+    override val connected: StateFlow<Boolean> = mutableConnected
     private val mutableEvents = MutableSharedFlow<PreloEvent>(extraBufferCapacity = 64)
-    val events: SharedFlow<PreloEvent> = mutableEvents
+    override val events: SharedFlow<PreloEvent> = mutableEvents
 
-    fun start() {
+    override fun start() {
         if (job?.isActive == true) return
         job = scope.launch {
             var backoff = 1000L
@@ -96,5 +103,5 @@ class PreloEvents @Inject constructor(
         }
     }
 
-    fun stop() { job?.cancel(); job = null; mutableConnected.value = false }
+    override fun stop() { job?.cancel(); job = null; mutableConnected.value = false }
 }
