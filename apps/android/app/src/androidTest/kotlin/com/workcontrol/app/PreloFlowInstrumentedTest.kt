@@ -7,10 +7,15 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.fragment.app.FragmentActivity
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.espresso.Espresso
 import com.workcontrol.app.data.auth.DevicePreferences
 import com.workcontrol.app.data.auth.DeviceSecurity
 import com.workcontrol.app.data.auth.SessionController
@@ -80,6 +85,74 @@ class PreloFlowInstrumentedTest {
         assertEquals(0, server.requestCount)
     }
 
+    @Test fun backFromTotpReturnsToEmailAndPassword() {
+        showScreen(tasksForbidden = false)
+        compose.onNodeWithText("E-mail").performTextInput("user@example.com")
+        compose.onNodeWithText("Senha").performTextInput("example-password")
+        compose.onNodeWithText("Entrar").performClick()
+        compose.onNodeWithText("Código").assertIsDisplayed()
+        Espresso.pressBack()
+        compose.onNodeWithText("E-mail").assertIsDisplayed()
+        compose.onNodeWithText("Senha").assertIsDisplayed()
+    }
+
+    @Test fun projectTaskBackReturnsToHome() {
+        showScreen(tasksForbidden = false)
+        login()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("Nada esperando por você agora.").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasScrollAction()).performScrollToIndex(4)
+        compose.onNodeWithContentDescription("Abrir projeto Loja").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("DOSSIÊ · PRELO").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasScrollAction()).performScrollToIndex(3)
+        compose.onNode(hasScrollAction()).performScrollToIndex(5)
+        compose.onNodeWithContentDescription("Abrir seção Tarefas").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("Inspecionar deploy").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Inspecionar deploy").performClick()
+        Espresso.pressBack()
+        compose.onNodeWithText("Pauta de trabalho").assertExists()
+        Espresso.pressBack()
+        compose.onNode(hasScrollAction()).performScrollToIndex(3)
+        compose.onNodeWithText("NÚMEROS DA EDIÇÃO").assertExists()
+        Espresso.pressBack()
+        compose.onNode(hasScrollAction()).performScrollToIndex(0)
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("Nada esperando por você agora.").fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(compose.onAllNodesWithText("Nada esperando por você agora.").fetchSemanticsNodes().isNotEmpty())
+    }
+
+    @Test fun taskSheetBackOnlyClosesSheet() {
+        showScreen(tasksForbidden = false)
+        login()
+        compose.onNodeWithText("＋ Nova tarefa").performClick()
+        compose.onNodeWithText("O que o agente deve fazer?").assertIsDisplayed()
+        Espresso.pressBack()
+        compose.onNodeWithText("＋ Nova tarefa").assertIsDisplayed()
+        compose.onNodeWithText("O que o agente deve fazer?").assertDoesNotExist()
+    }
+
+    @Test fun clientDossierShowsContactsAndTimeline() {
+        showScreen(tasksForbidden = false)
+        login()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("Nada esperando por você agora.").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(5_000) {
+            runCatching { compose.onNode(hasScrollAction()).performScrollToIndex(6) }.isSuccess &&
+                compose.onAllNodes(hasContentDescription("Abrir cliente Ana da Loja")).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithContentDescription("Abrir cliente Ana da Loja").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("DOSSIÊ · CLIENTE").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Ana da Loja").assertIsDisplayed()
+        compose.waitUntil(5_000) { runCatching { compose.onNode(hasScrollAction()).performScrollToIndex(4) }.isSuccess }
+        compose.onNodeWithText("EMAIL: ana@example.com").assertIsDisplayed()
+        compose.onNode(hasScrollAction()).performScrollToIndex(7)
+        compose.onNodeWithText("Criou projeto Loja").assertExists()
+    }
+
+    @Test fun clientsForbiddenShowsNoAccess() {
+        showScreen(tasksForbidden = false, clientsForbidden = true)
+        login()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("Sem acesso.").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Sem acesso.").assertIsDisplayed()
+    }
+
     private fun login() {
         compose.onNodeWithText("E-mail").performTextInput("user@example.com")
         compose.onNodeWithText("Senha").performTextInput("example-password")
@@ -89,12 +162,18 @@ class PreloFlowInstrumentedTest {
         compose.waitUntil(5_000) { compose.onAllNodesWithText("Tarefas").fetchSemanticsNodes().isNotEmpty() }
     }
 
-    private fun showScreen(tasksForbidden: Boolean, secureDevice: Boolean = true) {
+    private fun showScreen(tasksForbidden: Boolean, secureDevice: Boolean = true, clientsForbidden: Boolean = false) {
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
                 val body = when (request.path?.substringBefore('?')) {
                     "/api/v1/me" -> """{"userId":"u1","email":"user@example.com","role":"OPERATOR","scopes":[],"workspaceId":"w1","workspaceName":"Prelo","projects":[{"id":"p1","name":"Loja","clientId":null}],"session":{"kind":"mobile","deviceId":"d1","deviceName":"emulator"}}"""
                     "/api/v1/home" -> """{"recent":[],"pending":[]}"""
+                    "/api/v1/projects" -> """[{"id":"p1","name":"Loja","memberCount":2}]"""
+                    "/api/v1/clients" -> if (clientsForbidden) return MockResponse().setResponseCode(403)
+                        .addHeader("Content-Type", "application/json").setBody("""{"code":"forbidden"}""")
+                        else """[{"id":"c1","name":"Ana da Loja","company":"Loja","status":"ACTIVE","projectCount":1}]"""
+                    "/api/v1/clients/c1" -> """{"id":"c1","name":"Ana da Loja","status":"ACTIVE","stage":"REPLIED","contacts":[{"id":"cc1","kind":"EMAIL","value":"ana@example.com","isPrimary":true}],"projects":[{"id":"p1","name":"Loja"}]}"""
+                    "/api/v1/clients/c1/timeline" -> """[{"kind":"PROJECT","id":"p1","title":"Criou projeto Loja","detail":"Primeiro projeto","status":"ACTIVE","projectId":"p1","at":"2026-10-06T10:00:00Z"}]"""
                     "/api/v1/tasks" -> if (tasksForbidden) return MockResponse().setResponseCode(403)
                         .addHeader("Content-Type", "application/json").setBody("""{"code":"forbidden"}""")
                         else """[{"id":"t1","description":"Inspecionar deploy","status":"QUEUED","agentId":"a1"}]"""
