@@ -6,9 +6,16 @@ import androidx.compose.ui.test.SemanticsNodeInteractionCollection
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.workcontrol.app.core.designsystem.ThemeMode
@@ -86,7 +93,25 @@ class DesignTourTest {
         waitFor("Confirme que é você"); shot("02-codigo")
         compose.onAllNodesWithText("Código").onFirst().performTextInput("123456")
         tap("Verificar")
-        waitFor("Continuar de onde parou".uppercase()); shot("03-inicio")
+        waitFor("3 pendências esperando por você."); shot("03-inicio")
+
+        scrollWhenAvailable(6)
+        compose.onNodeWithContentDescription("Abrir projeto Loja Aurora").performClick()
+        waitFor("DOSSIÊ · EXOTERMO")
+        shot("03a-projeto-capa")
+        scrollWhenAvailable(3)
+        waitFor("Números da edição".uppercase()); shot("03a-projeto")
+        Espresso.pressBack(); waitFor("3 pendências esperando por você.")
+        tap("Mais"); scrollWhenAvailable(2)
+        tap("Clientes"); waitFor("Carteira de clientes"); shot("03b-clientes")
+        compose.onNodeWithContentDescription("Abrir cliente Padaria Bom Dia").performClick()
+        waitFor("DOSSIÊ · CLIENTE")
+        shot("03c-cliente-capa")
+        scrollWhenAvailable(4)
+        scrollWhenAvailable(8)
+        waitFor("Linha do tempo".uppercase()); shot("03c-cliente")
+        Espresso.pressBack(); waitFor("Carteira de clientes")
+        tap("Início")
 
         tap("Tarefas"); waitFor("Atualizar landing page da Loja Aurora"); shot("04-tarefas")
         tap("Atualizar landing page da Loja Aurora"); waitFor("▚ SAÍDA DO AGENTE"); shot("05-tarefa")
@@ -100,7 +125,7 @@ class DesignTourTest {
         tap("Mais"); tap("Linha de montagem"); waitFor("Revisar checkout"); shot("11-pipeline")
         tap("Mais"); tap("Arquivo"); waitFor("contrato-aurora.pdf"); shot("12-arquivos")
         tap("Mais"); tap("Sua conta"); waitFor("Aparelhos conectados".uppercase()); shot("13-conta")
-        tap("Início"); waitFor("Continuar de onde parou".uppercase()); tap("＋ Nova tarefa"); waitFor("O que o agente deve fazer?"); shot("14-nova-tarefa")
+        tap("Início"); waitFor("3 pendências esperando por você."); tap("＋ Nova tarefa"); waitFor("O que o agente deve fazer?"); shot("14-nova-tarefa")
     }
 
     /** Advances the (manual) Compose clock so springs settle and network results recompose. */
@@ -119,6 +144,15 @@ class DesignTourTest {
         throw AssertionError("Não apareceu na tela: $text")
     }
 
+    private fun scrollWhenAvailable(index: Int) {
+        val until = System.currentTimeMillis() + 10_000
+        while (System.currentTimeMillis() < until) {
+            if (runCatching { compose.onNode(hasScrollAction()).performScrollToIndex(index) }.isSuccess) return
+            settle(120)
+        }
+        throw AssertionError("A lista não chegou ao item $index:\n${compose.onRoot().printToString()}")
+    }
+
     private fun SemanticsNodeInteractionCollection.nodes() = runCatching { fetchSemanticsNodes() }.getOrDefault(emptyList())
 }
 
@@ -133,7 +167,10 @@ private object TourData : Dispatcher() {
         }
         val body = when {
             path == "/api/v1/me" -> """{"userId":"u1","email":"ana@exotermo.com.br","role":"ADMIN","scopes":[],"workspaceId":"w1","workspaceName":"Exotermo","projects":[{"id":"p1","name":"Loja Aurora","clientId":null},{"id":"p2","name":"Clínica Sol","clientId":null}],"session":{"kind":"mobile","deviceId":"d1","deviceName":"Pixel"}}"""
-            path == "/api/v1/projects" -> """[{"id":"p1","name":"Loja Aurora"},{"id":"p2","name":"Clínica Sol"}]"""
+            path == "/api/v1/projects" -> """[{"id":"p1","name":"Loja Aurora","description":"Nova loja online","clientId":"c1","memberCount":3,"coverColor":"clay"},{"id":"p2","name":"Clínica Sol","memberCount":2}]"""
+            path == "/api/v1/clients" -> """[{"id":"c1","name":"Padaria Bom Dia","company":"Padaria Bom Dia","status":"ACTIVE","stage":"REPLIED","projectCount":1,"primaryContact":{"kind":"EMAIL","value":"ola@padaria.example"}}]"""
+            path == "/api/v1/clients/c1" -> """{"id":"c1","name":"Padaria Bom Dia","company":"Padaria Bom Dia","status":"ACTIVE","stage":"REPLIED","city":"São Paulo","contacts":[{"id":"ct1","kind":"PHONE","value":"+5511999999999","isPrimary":true},{"id":"ct2","kind":"EMAIL","value":"ola@padaria.example"}],"projects":[{"id":"p1","name":"Loja Aurora"}]}"""
+            path == "/api/v1/clients/c1/timeline" -> """[{"kind":"PROJECT","id":"p1","title":"Loja Aurora criada","detail":"Projeto da padaria","status":"ACTIVE","projectId":"p1","at":"${ago(1500)}"}]"""
             path == "/api/v1/home" -> """{"recent":[
                 {"kind":"TASK","id":"t1","title":"Atualizar landing page da Loja Aurora","subtitle":"Loja Aurora","status":"RUNNING","projectId":"p1","viewedAt":"${ago(4)}"},
                 {"kind":"PROJECT","id":"p2","title":"Clínica Sol","subtitle":"3 tarefas abertas","status":"","projectId":"p2","viewedAt":"${ago(70)}"},

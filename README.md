@@ -7,7 +7,8 @@ Aplicativo Android do **Prelo Control**. O Prelo é a única fonte de identidade
 - Login por e-mail, senha e TOTP (ou código de recuperação no login). Se o servidor exigir configuração do TOTP, ela é feita no navegador.
 - Sessão móvel com access token somente em memória e refresh rotativo cifrado com chave do Android Keystore. O desbloqueio local usa biometria forte ou credencial do aparelho.
 - Contexto de usuário e projetos recebido de `GET /api/v1/me`. A seleção de projeto é apenas preferência de interface; o Prelo valida cada operação, inclusive `X-Project-Id`.
-- Home, tarefas, criação e execução, detalhes e turnos, aprovações com step-up TOTP quando o Prelo exigir, servidores, pipeline, arquivos listados e deploys por projeto.
+- Início com projetos, clientes, pendências e itens recentes; dossiês de projeto e cliente com contatos e linha do tempo. Tarefas, criação e execução, detalhes e turnos, aprovações com step-up TOTP quando o Prelo exigir, servidores, pipeline, arquivos listados e deploys por projeto.
+- Navegação com histórico e botão Voltar do Android: detalhe → lista → projeto/cliente → Início. As abas da barra inferior voltam para o Início.
 - Atualização por SSE em primeiro plano e polling de reserva. Push FCM opcional quando o Firebase estiver configurado.
 - Lista e revogação de aparelhos conectados.
 
@@ -35,6 +36,7 @@ saída do agente como teletipo, cantoneiras de HUD ao tocar, grade de pontos e v
 ```text
 Android UI → cliente HTTP autenticado → Prelo Control
              ├─ /me, /tasks, /approvals, /servers, /pipeline, /projects/*
+             ├─ /clients, /clients/{id}/timeline, /recent
              ├─ /events/stream (SSE, somente primeiro plano)
              └─ /me/push-token (FCM opcional)
 
