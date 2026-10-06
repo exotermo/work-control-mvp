@@ -96,12 +96,10 @@ fun <T> PreloBottomBar(items: List<BarItem<T>>, selected: T, onSelect: (T) -> Un
  * crooked, lands with a soft spring, and a fold shadow fades off it.
  */
 @Composable
-fun <T : Comparable<T>> PageTurn(target: T, modifier: Modifier = Modifier, content: @Composable (T) -> Unit) {
+fun <T> PageTurn(target: T, modifier: Modifier = Modifier, forward: Boolean = true,
+    content: @Composable (T) -> Unit) {
     val reduced = rememberReducedMotion()
     val palette = Prelo.colors
-    var previous by remember { mutableStateOf(target) }
-    val forward = remember(target) { target >= previous }
-    SideEffect { previous = target }
     key(target) {
         val progress = remember { Animatable(if (reduced) 1f else 0f) }
         LaunchedEffect(Unit) { if (progress.value < 1f) progress.animateTo(1f, PreloMotion.soft()) }
