@@ -88,7 +88,7 @@ fun HomeScreen(c: PreloController, padding: PaddingValues, notice: (@Composable 
                             relativeTime(item.str("viewedAt")), seed = (item.str("id") ?: "").hashCode(),
                             onClick = when (kind) {
                                 "TASK" -> ({ item.str("id")?.let { c.openTask(it) } })
-                                "PROJECT" -> ({ item.str("id")?.let { c.selectProject(it) } })
+                                "PROJECT" -> ({ item.str("id")?.let { c.openProject(it) } })
                                 else -> null
                             })
                     }

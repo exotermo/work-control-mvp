@@ -108,6 +108,12 @@ class PreloController internal constructor(
 
     fun selectProject(id: String) = action { preferences.setProjectId(id); selected = id }
 
+    /** Opens a project from the front page: it becomes the current project and its task list opens. */
+    fun openProject(id: String) = action {
+        preferences.setProjectId(id); selected = id
+        closeDetail(); page = Page.TASKS
+    }
+
     fun closeDetail() { detailId = null; detail = null; tree = null; execution = null; turns = null; stepUpId = null; health = null }
 
     fun action(block: suspend () -> Unit) {
