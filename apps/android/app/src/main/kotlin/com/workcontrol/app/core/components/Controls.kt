@@ -96,7 +96,7 @@ fun InkLink(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
         text,
         modifier
             .clickable(role = Role.Button, onClick = onClick)
-            .defaultMinSize(minHeight = 44.dp)
+            .defaultMinSize(minHeight = 48.dp)
             .padding(vertical = 12.dp, horizontal = 2.dp),
         style = androidx.compose.material3.MaterialTheme.typography.labelLarge, color = Prelo.colors.accentInk,
     )
@@ -134,7 +134,7 @@ fun InkChip(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modi
             .background(if (selected) palette.ink else palette.card.copy(alpha = 0f), shape)
             .border(2.dp, palette.ink, shape)
             .clickable(role = Role.Button, onClick = onClick)
-            .defaultMinSize(minHeight = 40.dp)
+            .defaultMinSize(minHeight = 48.dp)
             .padding(horizontal = 14.dp, vertical = 9.dp),
         contentAlignment = Alignment.Center,
     ) {

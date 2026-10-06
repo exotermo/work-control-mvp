@@ -53,7 +53,7 @@ fun DeploysScreen(c: PreloController, padding: PaddingValues) {
     val deploys = c.data.rows()
     val uri = LocalUriHandler.current
     LazyColumn(Modifier.fillMaxSize(), contentPadding = padding, verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        item(key = "cover") { SectionCover("Seção · Deploys", "Expedição", deck = "Pedidos de implantação e o que aconteceu com cada um.") }
+        item(key = "cover") { SectionCover("${c.projectName ?: "Projeto"} · Deploys", "Expedição", deck = "Pedidos de implantação e o que aconteceu com cada um.") }
         if (c.selected == null) item(key = "no-project") { EmptySheet("Escolha um projeto", "Os deploys são por projeto.") }
         pageState(c, c.data != null)
         if (c.data != null && deploys.isEmpty() && c.error == null) item(key = "empty") { EmptySheet("Nenhum deploy pedido neste projeto.") }
@@ -86,6 +86,7 @@ fun DeploysScreen(c: PreloController, padding: PaddingValues) {
 @Composable
 fun MoreScreen(c: PreloController, padding: PaddingValues) {
     val entries = listOf(
+        Triple(Page.CLIENTS, "Clientes", "Carteira de clientes e dossiês"),
         Triple(Page.SERVERS, "Sala de máquinas", "Servidores do projeto e saúde"),
         Triple(Page.PIPELINE, "Linha de montagem", "Pipeline: o que cada tarefa espera"),
         Triple(Page.FILES, "Arquivo", "Documentos do projeto"),
@@ -127,8 +128,8 @@ private fun TocRow(title: String, hint: String, number: String, onClick: () -> U
 fun ServersScreen(c: PreloController, padding: PaddingValues) {
     val servers = c.data.rows()
     LazyColumn(Modifier.fillMaxSize(), contentPadding = padding, verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        item(key = "back") { InkLink("← Índice", onClick = { if (c.detailId != null) c.closeDetail() else c.open(Page.MORE) }) }
-        item(key = "cover") { SectionCover("Seção · Máquinas", "Sala de máquinas", deck = "Os servidores deste projeto, vistos daqui.") }
+        item(key = "back") { InkLink("← Voltar", onClick = { c.back() }) }
+        item(key = "cover") { SectionCover("${c.projectName ?: "Projeto"} · Máquinas", "Sala de máquinas", deck = "Os servidores deste projeto, vistos daqui.") }
         pageState(c, c.data != null)
         val open = c.detailId
         if (open != null) {
@@ -192,8 +193,8 @@ private fun Telemetry(label: String, value: String?) {
 fun PipelineScreen(c: PreloController, padding: PaddingValues) {
     val roots = c.data.rows()
     LazyColumn(Modifier.fillMaxSize(), contentPadding = padding) {
-        item(key = "back") { InkLink("← Índice", onClick = { c.open(Page.MORE) }) }
-        item(key = "cover") { SectionCover("Seção · Pipeline", "Linha de montagem", deck = "Cada tarefa e o que ela espera agora.") }
+        item(key = "back") { InkLink("← Voltar", onClick = { c.back() }) }
+        item(key = "cover") { SectionCover("${c.projectName ?: "Projeto"} · Pipeline", "Linha de montagem", deck = "Cada tarefa e o que ela espera agora.") }
         pageState(c, c.data != null)
         if (c.data != null && roots.isEmpty() && c.error == null) item(key = "empty") { EmptySheet("Nada em produção agora.") }
         if (roots.isNotEmpty()) item(key = "tree") {
@@ -207,8 +208,8 @@ fun PipelineScreen(c: PreloController, padding: PaddingValues) {
 fun FilesScreen(c: PreloController, padding: PaddingValues, onDownload: (String, String) -> Unit) {
     val files = c.data.rows()
     LazyColumn(Modifier.fillMaxSize(), contentPadding = padding) {
-        item(key = "back") { InkLink("← Índice", onClick = { c.open(Page.MORE) }) }
-        item(key = "cover") { SectionCover("Seção · Arquivos", "Arquivo do projeto", deck = "Guardados cifrados no Prelo.") }
+        item(key = "back") { InkLink("← Voltar", onClick = { c.back() }) }
+        item(key = "cover") { SectionCover("${c.projectName ?: "Projeto"} · Arquivos", "Arquivo do projeto", deck = "Guardados cifrados no Prelo.") }
         if (c.selected == null) item(key = "no-project") { EmptySheet("Escolha um projeto", "Os arquivos são por projeto.") }
         pageState(c, c.data != null)
         if (c.data != null && files.isEmpty() && c.error == null) item(key = "empty") { EmptySheet("Nenhum arquivo neste projeto.") }

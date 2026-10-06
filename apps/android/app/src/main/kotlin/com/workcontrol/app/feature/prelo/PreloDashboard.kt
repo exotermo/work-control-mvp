@@ -1,6 +1,7 @@
 package com.workcontrol.app.feature.prelo
 
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,6 +41,8 @@ import com.workcontrol.app.core.components.PreloBottomBar
 import com.workcontrol.app.core.components.PressSkeleton
 import com.workcontrol.app.core.components.ScanlineSweep
 import com.workcontrol.app.core.components.Rule
+import com.workcontrol.app.core.components.Stamp
+import com.workcontrol.app.core.components.Tone
 import com.workcontrol.app.core.designsystem.Prelo
 import com.workcontrol.app.data.auth.DevicePreferences
 import com.workcontrol.app.data.prelo.ApprovalDecisions
@@ -56,6 +59,10 @@ import com.workcontrol.app.feature.prelo.screens.NewTaskSheet
 import com.workcontrol.app.feature.prelo.screens.PipelineScreen
 import com.workcontrol.app.feature.prelo.screens.ServersScreen
 import com.workcontrol.app.feature.prelo.screens.TasksScreen
+import com.workcontrol.app.feature.prelo.screens.ProjectScreen
+import com.workcontrol.app.feature.prelo.screens.ClientsScreen
+import com.workcontrol.app.feature.prelo.screens.ClientScreen
+import kotlinx.coroutines.delay
 
 /**
  * The signed-in app: a front page with the masthead and telemetry strip, sections turned like
@@ -72,6 +79,25 @@ fun PreloDashboard(me: Me, api: PreloResourceApi, preferences: DevicePreferences
     val connected by events.connected.collectAsState()
     var newTask by remember { mutableStateOf(false) }
     var choosingProject by remember { mutableStateOf(false) }
+    var projectStamp by remember { mutableStateOf(false) }
+    var previousProject by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(c.selected) {
+        val next = c.selected
+        if (previousProject != null && previousProject != next) {
+            projectStamp = true
+            delay(900)
+            projectStamp = false
+        }
+        previousProject = next
+    }
+    BackHandler(newTask || choosingProject || c.stepUpId != null || c.canGoBack) {
+        when {
+            newTask -> newTask = false
+            choosingProject -> choosingProject = false
+            c.stepUpId != null -> c.cancelStepUp()
+            else -> c.back()
+        }
+    }
     val saveFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         c.saveDownload(context, uri)
     }
@@ -85,7 +111,8 @@ fun PreloDashboard(me: Me, api: PreloResourceApi, preferences: DevicePreferences
         BarItem(Page.DEPLOYS, "Deploys", Icons.Outlined.RocketLaunch),
         BarItem(Page.MORE, "Mais", Icons.Outlined.MenuBook),
     )
-    val barSelection = if (c.page in listOf(Page.SERVERS, Page.PIPELINE, Page.FILES, Page.ACCOUNT)) Page.MORE else c.page
+    val barSelection = if (c.page in listOf(Page.SERVERS, Page.PIPELINE, Page.FILES, Page.ACCOUNT, Page.CLIENTS, Page.CLIENT)) Page.MORE
+        else if (c.page == Page.PROJECT) Page.HOME else c.page
 
     PaperBackground(modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
@@ -96,9 +123,11 @@ fun PreloDashboard(me: Me, api: PreloResourceApi, preferences: DevicePreferences
                 onProjectClick = if (c.projects.size > 1) ({ choosingProject = true }) else null,
                 pollSeconds = 10,
             )
+            if (projectStamp) Stamp("PROJETO TROCADO", Tone.OK,
+                modifier = Modifier.padding(start = 16.dp, top = 4.dp), delayMs = 0)
             ScanlineSweep(c.liveTick)
             Box(Modifier.weight(1f).fillMaxWidth()) {
-                PageTurn(c.page, Modifier.fillMaxSize()) { page ->
+                PageTurn(c.page to c.detailId, Modifier.fillMaxSize(), forward = c.forward) { (page, _) ->
                     val pad = PaddingValues(start = 16.dp, end = 16.dp, bottom = 96.dp)
                     when (page) {
                         Page.HOME -> HomeScreen(c, pad, homeNotice)
@@ -110,6 +139,9 @@ fun PreloDashboard(me: Me, api: PreloResourceApi, preferences: DevicePreferences
                         Page.PIPELINE -> PipelineScreen(c, pad)
                         Page.FILES -> FilesScreen(c, pad) { id, name -> c.requestDownload(id); pendingDownloadName = name }
                         Page.ACCOUNT -> AccountPage(c, pad, account)
+                        Page.PROJECT -> ProjectScreen(c, pad)
+                        Page.CLIENTS -> ClientsScreen(c, pad)
+                        Page.CLIENT -> ClientScreen(c, pad)
                     }
                 }
                 if (c.page in listOf(Page.HOME, Page.TASKS) && c.detailId == null) {
@@ -118,7 +150,7 @@ fun PreloDashboard(me: Me, api: PreloResourceApi, preferences: DevicePreferences
                 }
             }
             PreloBottomBar(tabs, barSelection, onSelect = { target ->
-                if (target == c.page && c.detailId != null) c.closeDetail() else c.open(target)
+                c.openTab(target)
             })
         }
     }

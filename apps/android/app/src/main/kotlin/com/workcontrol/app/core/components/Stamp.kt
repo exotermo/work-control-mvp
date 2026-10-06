@@ -46,6 +46,15 @@ fun stampFor(status: String?): Pair<String, Tone> = when (status?.uppercase()) {
     "ONLINE", "HEALTHY", "OK", "UP" -> "NO AR" to Tone.OK
     "OFFLINE", "UNHEALTHY", "DOWN", "UNREACHABLE" -> "FORA DO AR" to Tone.BAD
     "UNKNOWN" -> "SEM SINAL" to Tone.NEUTRAL
+    "LEAD" -> "LEAD" to Tone.WAIT
+    "ACTIVE" -> "ATIVO" to Tone.OK
+    "INACTIVE" -> "INATIVO" to Tone.NEUTRAL
+    "DISCARDED" -> "DESCARTADO" to Tone.BAD
+    "NEW" -> "NOVO" to Tone.NEUTRAL
+    "ANALYZED" -> "ANALISADO" to Tone.WAIT
+    "CONTACTED" -> "CONTATADO" to Tone.WAIT
+    "REPLIED" -> "RESPONDEU" to Tone.OK
+    "QUALIFIED" -> "QUALIFICADO" to Tone.OK
     else -> status.uppercase().replace('_', ' ') to Tone.NEUTRAL
 }
 

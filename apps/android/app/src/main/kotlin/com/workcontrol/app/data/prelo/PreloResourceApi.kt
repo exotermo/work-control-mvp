@@ -17,6 +17,11 @@ interface PreloResourceApi {
     @DELETE("api/v1/me/push-token") suspend fun deletePush()
     @GET("api/v1/home") suspend fun home(): JsonElement
     @GET("api/v1/projects") suspend fun projects(): JsonElement
+    @GET("api/v1/clients") suspend fun clients(): JsonElement
+    @GET("api/v1/clients/{id}") suspend fun client(@Path("id") id: String): JsonElement
+    @GET("api/v1/clients/{id}/timeline")
+    suspend fun clientTimeline(@Path("id") id: String, @Query("before") before: String? = null): JsonElement
+    @POST("api/v1/recent") suspend fun recent(@Body body: RecentTouch): JsonElement
     @GET("api/v1/agents") suspend fun agents(): JsonElement
     @GET("api/v1/tasks") suspend fun tasks(): JsonElement
     @GET("api/v1/tasks/{id}") suspend fun task(@Path("id") id: String): JsonElement
@@ -50,3 +55,4 @@ interface PreloResourceApi {
 data class ApprovalDecision(val totpCode: String? = null)
 data class PushToken(val token: String)
 data class PushRegistration(val registered: Boolean, val pushEnabled: Boolean)
+data class RecentTouch(val kind: String, val id: String)

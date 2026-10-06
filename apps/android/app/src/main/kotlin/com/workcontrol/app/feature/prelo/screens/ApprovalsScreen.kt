@@ -62,7 +62,7 @@ fun ApprovalsScreen(c: PreloController, padding: PaddingValues) {
     val pending = all.filter { it.str("status") == "PENDING" }
     val decided = all.filterNot { it.str("status") == "PENDING" }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = padding, verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        item(key = "cover") { SectionCover("Seção · Aprovações", "Mesa de decisão", deck = "Nada de risco acontece sem o seu carimbo.") }
+        item(key = "cover") { SectionCover("${c.projectName ?: "Projeto"} · Aprovações", "Mesa de decisão", deck = "Nada de risco acontece sem o seu carimbo.") }
         pageState(c, c.data != null)
         if (c.data != null && c.error == null) {
             item(key = "pending-title") { SectionTitle("Esperando você", count = pending.size) }

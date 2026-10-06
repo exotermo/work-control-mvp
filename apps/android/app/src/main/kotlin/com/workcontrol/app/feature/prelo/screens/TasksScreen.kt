@@ -61,7 +61,7 @@ fun TasksScreen(c: PreloController, padding: PaddingValues) {
     if (c.detailId != null) { TaskDetail(c, padding); return }
     val tasks = c.data.rows()
     LazyColumn(Modifier.fillMaxSize(), contentPadding = padding, verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        item(key = "cover") { SectionCover("Seção · Tarefas", "Pauta de trabalho", deck = "O que os agentes estão fazendo neste projeto.") }
+        item(key = "cover") { SectionCover("${c.projectName ?: "Projeto"} · Tarefas", "Pauta de trabalho", deck = "O que os agentes estão fazendo neste projeto.") }
         pageState(c, c.data != null)
         if (c.data != null && tasks.isEmpty() && c.error == null) item(key = "empty") {
             EmptySheet("Nenhuma tarefa na pauta.", "Toque em “Nova tarefa” para mandar um agente trabalhar.")

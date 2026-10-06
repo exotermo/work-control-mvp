@@ -15,6 +15,24 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.graphicsLayer
+import kotlinx.coroutines.delay
+import com.workcontrol.app.core.components.InkChip
+import com.workcontrol.app.core.components.drawHudCorners
+import com.workcontrol.app.core.components.InkLink
+import com.workcontrol.app.core.components.stampFor
+import com.workcontrol.app.core.designsystem.PreloMotion
+import com.workcontrol.app.core.designsystem.rememberReducedMotion
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -22,6 +40,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.workcontrol.app.core.components.EmptySheet
@@ -37,6 +57,7 @@ import com.workcontrol.app.feature.prelo.PreloController
 import com.workcontrol.app.feature.prelo.child
 import com.workcontrol.app.feature.prelo.pageState
 import com.workcontrol.app.feature.prelo.relativeTime
+import com.workcontrol.app.feature.prelo.recentDestination
 import com.workcontrol.app.feature.prelo.rows
 import com.workcontrol.app.feature.prelo.str
 
@@ -52,6 +73,8 @@ private val recentKicker = mapOf("CLIENT" to "Cliente", "PROJECT" to "Projeto", 
 fun HomeScreen(c: PreloController, padding: PaddingValues, notice: (@Composable () -> Unit)?) {
     val pending = c.data.child("pending").rows()
     val recent = c.data.child("recent").rows()
+    var clientFilter by remember { mutableStateOf("ACTIVE") }
+    val clients = c.clientList.filter { clientFilter == "ALL" || it.str("status") == clientFilter }.take(6)
     val name = c.me.email.substringBefore('@').replaceFirstChar { it.uppercase() }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = padding) {
         item(key = "cover") {
@@ -74,10 +97,36 @@ fun HomeScreen(c: PreloController, padding: PaddingValues, notice: (@Composable 
                     relativeTime(item.str("at"))) {
                     if (item.str("kind") == "APPROVAL") {
                         item.str("projectId")?.let { c.selectProject(it) }
-                        c.open(Page.APPROVALS)
-                    } else item.str("taskId")?.let { c.openTask(it) }
+                        item.str("id")?.let { c.openApproval(it, item.str("projectId")) }
+                    } else item.str("taskId")?.let { c.openTask(it, item.str("projectId")) }
                 }
             }
+            item(key = "projects-title") { SectionTitle("Projetos", count = c.projects.size) }
+            if (c.projects.isEmpty()) item(key = "projects-empty") { EmptySheet("Nenhum projeto disponível.") }
+            items(c.projects.withIndex().toList(), key = { "project-" + it.value.id }) { (index, project) ->
+                ProjectFolder(project.name, project.description,
+                    c.clientList.firstOrNull { it.str("id") == project.clientId }?.str("name"),
+                    project.memberCount, project.coverColor, project.id == c.selected,
+                    index, project.id.hashCode()) { c.openProject(project.id) }
+            }
+            item(key = "clients-title") {
+                Column {
+                    SectionTitle("Clientes", count = c.clientList.size)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf("ACTIVE" to "Ativos", "LEAD" to "Leads", "ALL" to "Todos").forEach { (value, label) ->
+                            InkChip(label, clientFilter == value, onClick = { clientFilter = value })
+                        }
+                    }
+                }
+            }
+            c.clientsError?.let { message -> item(key = "clients-error") { com.workcontrol.app.core.components.ErrorClipping(message, onRetry = { c.reload() }) } }
+            if (clients.isEmpty() && c.clientsError == null) item(key = "clients-empty") { EmptySheet("Nenhum cliente nesta seleção.") }
+            items(clients, key = { "client-" + it.str("id") }) { client ->
+                val id = client.str("id") ?: return@items
+                ClientRow(client.str("name") ?: "Cliente", client.str("company"), client.str("status"),
+                    client.str("projectCount"), client.str("stage"), client.child("primaryContact").str("value")) { c.openClient(id) }
+            }
+            item(key = "all-clients") { InkLink("Ver todos os clientes →", onClick = { c.open(Page.CLIENTS) }) }
             item(key = "recent-title") { SectionTitle("Continuar de onde parou") }
             item(key = "recent") {
                 if (recent.isEmpty()) EmptySheet("Os projetos e tarefas que você abrir aparecem aqui.")
@@ -85,11 +134,14 @@ fun HomeScreen(c: PreloController, padding: PaddingValues, notice: (@Composable 
                     items(recent, key = { (it.str("kind") ?: "") + (it.str("id") ?: "") }) { item ->
                         val kind = item.str("kind")
                         RecentCard(recentKicker[kind] ?: "Item", item.str("title") ?: "—", item.str("subtitle"),
-                            relativeTime(item.str("viewedAt")), seed = (item.str("id") ?: "").hashCode(),
-                            onClick = when (kind) {
-                                "TASK" -> ({ item.str("id")?.let { c.openTask(it) } })
-                                "PROJECT" -> ({ item.str("id")?.let { c.openProject(it) } })
-                                else -> null
+                            relativeTime(item.str("viewedAt")), item.str("status"), seed = (item.str("id") ?: "").hashCode(),
+                            onClick = recentDestination(kind, item.str("id"), item.str("projectId"))?.let { target ->
+                                { when (target.page) {
+                                    Page.TASKS -> c.openTask(target.id!!, target.projectId)
+                                    Page.PROJECT -> c.openProject(target.projectId!!)
+                                    Page.CLIENT -> c.openClient(target.id!!)
+                                    else -> Unit
+                                } }
                             })
                     }
                 }
@@ -125,7 +177,7 @@ private fun PendingRow(kind: String?, title: String, detail: String, at: String?
 
 /** ".recent-card": small aged card, tilted, serif title, typewritten time. */
 @Composable
-private fun RecentCard(kicker: String, title: String, subtitle: String?, at: String?, seed: Int, onClick: (() -> Unit)?) {
+private fun RecentCard(kicker: String, title: String, subtitle: String?, at: String?, status: String?, seed: Int, onClick: (() -> Unit)?) {
     val palette = Prelo.colors
     Column(
         Modifier
@@ -144,5 +196,71 @@ private fun RecentCard(kicker: String, title: String, subtitle: String?, at: Str
         if (!subtitle.isNullOrBlank()) Text(subtitle, style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
             color = palette.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
         if (at != null) Text(at, Modifier.padding(top = 4.dp), style = PreloType.Dateline, color = palette.faint)
+        if (!status.isNullOrBlank()) {
+            val (label, tone) = stampFor(status)
+            Stamp(label, tone, animate = false)
+        }
+    }
+}
+
+@Composable
+private fun ProjectFolder(name: String, description: String?, clientName: String?, members: Int?, coverColor: String?, current: Boolean,
+    index: Int, seed: Int, onClick: () -> Unit) {
+    val palette = Prelo.colors
+    val coverInk = when (coverColor) {
+        "clay" -> palette.kicker
+        "moss" -> palette.ok
+        "ocean" -> palette.accentInk
+        "plum" -> palette.bad
+        "mustard" -> palette.wait
+        else -> palette.ink
+    }
+    val reduced = rememberReducedMotion()
+    val progress = remember { Animatable(if (reduced) 1f else 0f) }
+    val opening = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(index, reduced) {
+        if (reduced) progress.snapTo(1f)
+        else { delay(index.coerceAtMost(8) * 90L); progress.animateTo(1f, PreloMotion.soft()) }
+    }
+    Column(Modifier.fillMaxWidth().padding(vertical = 7.dp)
+        .graphicsLayer { alpha = progress.value; translationY = (1f - progress.value) * 24.dp.toPx();
+            rotationZ = tiltFor(seed) * (1f - progress.value); rotationX = -12f * opening.value;
+            scaleX = 1f + 0.035f * opening.value; scaleY = 1f + 0.035f * opening.value }
+        .background(palette.paper, RoundedCornerShape(4.dp))
+        .border(1.dp, palette.ruleSoft, RoundedCornerShape(4.dp))
+        .drawBehind { drawRect(coverInk, size = androidx.compose.ui.geometry.Size(4.dp.toPx(), size.height)) }
+        .drawBehind { if (opening.value > 0f) drawHudCorners(palette.accent.copy(alpha = opening.value), inset = -4.dp.toPx()) }
+        .semantics { contentDescription = "Abrir projeto $name" }
+        .clickable(role = Role.Button) {
+            if (reduced) onClick()
+            else scope.launch { opening.animateTo(1f, tween(180)); onClick() }
+        }.heightIn(min = 96.dp).padding(16.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(name, Modifier.weight(1f), style = androidx.compose.material3.MaterialTheme.typography.headlineSmall, color = palette.ink)
+            if (current) Stamp("EM PAUTA", Tone.OK, animate = false)
+        }
+        if (!description.isNullOrBlank()) Text(description, style = PreloType.Body, color = palette.text, maxLines = 2)
+        if (!clientName.isNullOrBlank()) Text(clientName, style = PreloType.Body, color = palette.text)
+        Text(members?.let { "$it membros" } ?: "Membros: —", Modifier.padding(top = 8.dp), style = PreloType.Dateline, color = palette.faint)
+    }
+}
+
+@Composable
+internal fun ClientRow(name: String, company: String?, status: String?, projectCount: String?,
+    stage: String? = null, primaryContact: String? = null, onClick: () -> Unit) {
+    val palette = Prelo.colors
+    val (label, tone) = stampFor(status)
+    Row(Modifier.fillMaxWidth().semantics { contentDescription = "Abrir cliente $name" }
+        .clickable(role = Role.Button, onClick = onClick).heightIn(min = 64.dp)
+        .padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(name, style = androidx.compose.material3.MaterialTheme.typography.titleMedium, color = palette.ink)
+            Text(listOfNotNull(company, projectCount?.let { "$it projetos" }).joinToString(" · "),
+                style = PreloType.Dateline, color = palette.text)
+            if (stage != null || primaryContact != null) Text(listOfNotNull(stage?.let { stampFor(it).first }, primaryContact).joinToString(" · "),
+                style = PreloType.Dateline, color = palette.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Stamp(label, tone, animate = false)
     }
 }

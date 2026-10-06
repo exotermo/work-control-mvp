@@ -69,7 +69,9 @@ data class Me(val userId: String, val email: String, val role: String, val scope
 data class Session(val kind: String, val deviceId: String?, val deviceName: String?)
 data class MobileSession(val id: String, val deviceName: String, val platform: String,
     val createdAt: String, val lastUsedAt: String, val expiresAt: String, val current: Boolean)
-data class Project(val id: String, val name: String, val clientId: String?)
+data class Project(val id: String, val name: String, val clientId: String?,
+    val description: String? = null, val memberCount: Int? = null,
+    val coverColor: String? = null, val defaultAgentId: String? = null)
 data class Task(val id: String, val description: String, val status: String, val agentId: String,
     val createdAt: String, val projectId: String?)
 data class CreateTask(val description: String, val agentId: String? = null)
